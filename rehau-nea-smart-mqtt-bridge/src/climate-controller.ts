@@ -1073,12 +1073,15 @@ class ClimateController {
     const controllers = data.data.data;
     
     logger.info(`Processing LIVE_DIDO data for installation ${installName}`);
+    logger.debug(`LIVE_DIDO controllers:`, Object.keys(controllers));
     
     Object.entries(controllers).forEach(([controllerKey, controllerData]) => {
       const controllerNumber = controllerKey.replace(/\D/g, '');
+      logger.debug(`Processing ${controllerKey}:`, { hasDI: !!controllerData.DI, hasDO: !!controllerData.DO });
       
       // Publish Digital Inputs
-      controllerData.DI.forEach((state, index) => {
+      if (controllerData.DI && Array.isArray(controllerData.DI)) {
+        controllerData.DI.forEach((state, index) => {
         const baseTopic = `homeassistant/binary_sensor/rehau_${installId}_${controllerKey.toLowerCase()}_di${index}`;
         
         this.mqttBridge.publishToHomeAssistant(
@@ -1102,10 +1105,12 @@ class ClimateController {
           state ? 'ON' : 'OFF',
           { retain: true }
         );
-      });
+        });
+      }
       
       // Publish Digital Outputs
-      controllerData.DO.forEach((state, index) => {
+      if (controllerData.DO && Array.isArray(controllerData.DO)) {
+        controllerData.DO.forEach((state, index) => {
         const baseTopic = `homeassistant/binary_sensor/rehau_${installId}_${controllerKey.toLowerCase()}_do${index}`;
         
         this.mqttBridge.publishToHomeAssistant(
@@ -1129,9 +1134,12 @@ class ClimateController {
           state ? 'ON' : 'OFF',
           { retain: true }
         );
-      });
+        });
+      }
       
-      logger.debug(`Published ${controllerKey} sensors: ${controllerData.DI.length} DI, ${controllerData.DO.length} DO`);
+      const diCount = controllerData.DI?.length || 0;
+      const doCount = controllerData.DO?.length || 0;
+      logger.debug(`Published ${controllerKey} sensors: ${diCount} DI, ${doCount} DO`);
     });
   }
 }
