@@ -8,7 +8,9 @@ import {
   ZoneInfo,
   HACommand,
   RehauMQTTMessage,
-  RehauCommandData
+  RehauCommandData,
+  LiveEMUData,
+  LiveDIDOData
 } from './types';
 
 interface ExtendedZoneInfo extends ZoneInfo {
@@ -20,10 +22,12 @@ interface ExtendedZoneInfo extends ZoneInfo {
 class ClimateController {
   private mqttBridge: RehauMQTTBridge;
   private installations: Map<string, ClimateState>;
+  private installationNames: Map<string, string>; // Map installId -> installName
 
   constructor(mqttBridge: RehauMQTTBridge, _rehauApi: RehauAuthPersistent) {
     this.mqttBridge = mqttBridge;
     this.installations = new Map<string, ClimateState>();
+    this.installationNames = new Map<string, string>();
     
     // Listen to REHAU messages and HA commands
     this.mqttBridge.onMessage((topicOrCommand, payload?) => {
@@ -31,8 +35,16 @@ class ClimateController {
       if (typeof topicOrCommand === 'object' && topicOrCommand.type === 'ha_command') {
         this.handleHomeAssistantCommand(topicOrCommand);
       } else if (typeof topicOrCommand === 'string' && payload) {
-        // REHAU message (topic, payload arguments)
-        this.handleRehauUpdate(topicOrCommand, payload);
+        // Check for LIVE data responses
+        const msg = payload as RehauMQTTMessage;
+        if (msg.type === 'live_data' && (msg as any).data?.type === 'LIVE_EMU') {
+          this.handleLiveEMU(payload as LiveEMUData);
+        } else if (msg.type === 'live_data' && (msg as any).data?.type === 'LIVE_DIDO') {
+          this.handleLiveDIDO(payload as LiveDIDOData);
+        } else {
+          // Regular REHAU message (topic, payload arguments)
+          this.handleRehauUpdate(topicOrCommand, payload);
+        }
       }
     });
   }
@@ -40,6 +52,9 @@ class ClimateController {
   initializeInstallation(install: RehauInstallation): void {
     const installId = install.unique;
     const installName = install.name;
+    
+    // Store installation name for later use
+    this.installationNames.set(installId, installName);
     
     // Get zones from groups (not controllers)
     const zones: ExtendedZoneInfo[] = [];
@@ -264,9 +279,9 @@ class ClimateController {
     this.mqttBridge.publishToHomeAssistant(discoveryTopic, config, { retain: true });
     
     // Log the full config for debugging
-    logger.info(`Discovery config for ${zoneName}:`);
-    logger.info(`Topic: ${discoveryTopic}`);
-    logger.info(`Config: ${JSON.stringify(config, null, 2)}`);
+    logger.debug(`Discovery config for ${zoneName}:`);
+    logger.debug(`Topic: ${discoveryTopic}`);
+    logger.debug(`Config: ${JSON.stringify(config, null, 2)}`);
     
     // Publish initial availability
     this.mqttBridge.publishToHomeAssistant(
@@ -903,6 +918,246 @@ class ClimateController {
     const topic = `client/${installId}`;
     this.mqttBridge.publishToRehau(topic, message);
     logger.debug(`Sent REHAU command to zone ${zoneNumber}, channel ${channelNumber}:`, data);
+  }
+
+  /**
+   * Handle LIVE_EMU data (Mixed Circuits)
+   */
+  private handleLiveEMU(data: LiveEMUData): void {
+    const installId = data.data.unique;
+    const installName = this.installationNames.get(installId) || installId;
+    const circuits = data.data.data;
+    
+    logger.info(`Processing LIVE_EMU data for installation ${installName}`);
+    
+    Object.entries(circuits).forEach(([mcKey, mcData]) => {
+      // Skip if circuit is not present (supply temp = 32767 indicates not present)
+      if (mcData.mixed_circuit1_supply === 32767) {
+        logger.debug(`Skipping ${mcKey} - not present`);
+        return;
+      }
+      
+      const mcNumber = mcKey.replace('MC', '');
+      const baseTopic = `homeassistant/sensor/rehau_${installId}_${mcKey.toLowerCase()}`;
+      
+      // Publish pump state (binary sensor)
+      this.mqttBridge.publishToHomeAssistant(
+        `homeassistant/binary_sensor/rehau_${installId}_${mcKey.toLowerCase()}_pump/config`,
+        JSON.stringify({
+          name: `Mixed Circuit ${mcNumber} Pump`,
+          unique_id: `rehau_${installId}_mc${mcNumber}_pump`,
+          state_topic: `${baseTopic}_pump/state`,
+          device_class: 'running',
+          payload_on: 'ON',
+          payload_off: 'OFF',
+          entity_category: 'diagnostic',
+          device: {
+            identifiers: [`rehau_${installId}`],
+            name: `REHAU ${installName}`,
+            manufacturer: 'REHAU',
+            model: 'NEA SMART 2.0'
+          }
+        })
+      );
+      this.mqttBridge.publishToHomeAssistant(
+        `${baseTopic}_pump/state`,
+        mcData.pumpOn === 1 ? 'ON' : 'OFF',
+        { retain: true }
+      );
+      
+      // Publish setpoint temperature
+      this.mqttBridge.publishToHomeAssistant(
+        `${baseTopic}_setpoint/config`,
+        JSON.stringify({
+          name: `Mixed Circuit ${mcNumber} Setpoint`,
+          unique_id: `rehau_${installId}_mc${mcNumber}_setpoint`,
+          state_topic: `${baseTopic}_setpoint/state`,
+          unit_of_measurement: '°C',
+          device_class: 'temperature',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
+          device: {
+            identifiers: [`rehau_${installId}`],
+            name: `REHAU ${installName}`,
+            manufacturer: 'REHAU',
+            model: 'NEA SMART 2.0'
+          }
+        })
+      );
+      const setpointC = this.convertTemp(mcData.mixed_circuit1_setpoint);
+      if (setpointC !== null) {
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}_setpoint/state`,
+          setpointC.toString(),
+          { retain: true }
+        );
+      }
+      
+      // Publish supply temperature
+      this.mqttBridge.publishToHomeAssistant(
+        `${baseTopic}_supply/config`,
+        JSON.stringify({
+          name: `Mixed Circuit ${mcNumber} Supply`,
+          unique_id: `rehau_${installId}_mc${mcNumber}_supply`,
+          state_topic: `${baseTopic}_supply/state`,
+          unit_of_measurement: '°C',
+          device_class: 'temperature',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
+          device: {
+            identifiers: [`rehau_${installId}`],
+            name: `REHAU ${installName}`,
+            manufacturer: 'REHAU',
+            model: 'NEA SMART 2.0'
+          }
+        })
+      );
+      const supplyC = this.convertTemp(mcData.mixed_circuit1_supply);
+      if (supplyC !== null) {
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}_supply/state`,
+          supplyC.toString(),
+          { retain: true }
+        );
+      }
+      
+      // Publish return temperature
+      this.mqttBridge.publishToHomeAssistant(
+        `${baseTopic}_return/config`,
+        JSON.stringify({
+          name: `Mixed Circuit ${mcNumber} Return`,
+          unique_id: `rehau_${installId}_mc${mcNumber}_return`,
+          state_topic: `${baseTopic}_return/state`,
+          unit_of_measurement: '°C',
+          device_class: 'temperature',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
+          device: {
+            identifiers: [`rehau_${installId}`],
+            name: `REHAU ${installName}`,
+            manufacturer: 'REHAU',
+            model: 'NEA SMART 2.0'
+          }
+        })
+      );
+      const returnC = this.convertTemp(mcData.mixed_circuit1_return);
+      if (returnC !== null) {
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}_return/state`,
+          returnC.toString(),
+          { retain: true }
+        );
+      }
+      
+      // Publish valve opening percentage
+      this.mqttBridge.publishToHomeAssistant(
+        `${baseTopic}_opening/config`,
+        JSON.stringify({
+          name: `Mixed Circuit ${mcNumber} Opening`,
+          unique_id: `rehau_${installId}_mc${mcNumber}_opening`,
+          state_topic: `${baseTopic}_opening/state`,
+          unit_of_measurement: '%',
+          icon: 'mdi:valve',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
+          device: {
+            identifiers: [`rehau_${installId}`],
+            name: `REHAU ${installName}`,
+            manufacturer: 'REHAU',
+            model: 'NEA SMART 2.0'
+          }
+        })
+      );
+      this.mqttBridge.publishToHomeAssistant(
+        `${baseTopic}_opening/state`,
+        mcData.mixed_circuit1_opening.toString(),
+        { retain: true }
+      );
+      
+      const setpointForLog = this.convertTemp(mcData.mixed_circuit1_setpoint);
+      logger.debug(`Published ${mcKey} sensors: pump=${mcData.pumpOn}, setpoint=${setpointForLog}°C`);
+    });
+  }
+
+  /**
+   * Handle LIVE_DIDO data (Digital Inputs/Outputs)
+   */
+  private handleLiveDIDO(data: LiveDIDOData): void {
+    const installId = data.data.unique;
+    const installName = this.installationNames.get(installId) || installId;
+    const controllers = data.data.data;
+    
+    logger.info(`Processing LIVE_DIDO data for installation ${installName}`);
+    logger.debug(`LIVE_DIDO controllers:`, Object.keys(controllers));
+    
+    Object.entries(controllers).forEach(([controllerKey, controllerData]) => {
+      const controllerNumber = controllerKey.replace(/\D/g, '');
+      logger.debug(`Processing ${controllerKey}:`, { hasDI: !!controllerData.DI, hasDO: !!controllerData.DO });
+      
+      // Publish Digital Inputs
+      if (controllerData.DI && Array.isArray(controllerData.DI)) {
+        controllerData.DI.forEach((state, index) => {
+        const baseTopic = `homeassistant/binary_sensor/rehau_${installId}_${controllerKey.toLowerCase()}_di${index}`;
+        
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}/config`,
+          JSON.stringify({
+            name: `Controller ${controllerNumber} DI${index}`,
+            unique_id: `rehau_${installId}_ctrl${controllerNumber}_di${index}`,
+            state_topic: `${baseTopic}/state`,
+            payload_on: 'ON',
+            payload_off: 'OFF',
+            entity_category: 'diagnostic',
+            device: {
+              identifiers: [`rehau_${installId}`],
+              name: `REHAU ${installName}`,
+              manufacturer: 'REHAU',
+              model: 'NEA SMART 2.0'
+            }
+          })
+        );
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}/state`,
+          state ? 'ON' : 'OFF',
+          { retain: true }
+        );
+        });
+      }
+      
+      // Publish Digital Outputs
+      if (controllerData.DO && Array.isArray(controllerData.DO)) {
+        controllerData.DO.forEach((state, index) => {
+        const baseTopic = `homeassistant/binary_sensor/rehau_${installId}_${controllerKey.toLowerCase()}_do${index}`;
+        
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}/config`,
+          JSON.stringify({
+            name: `Controller ${controllerNumber} DO${index}`,
+            unique_id: `rehau_${installId}_ctrl${controllerNumber}_do${index}`,
+            state_topic: `${baseTopic}/state`,
+            payload_on: 'ON',
+            payload_off: 'OFF',
+            entity_category: 'diagnostic',
+            device: {
+              identifiers: [`rehau_${installId}`],
+              name: `REHAU ${installName}`,
+              manufacturer: 'REHAU',
+              model: 'NEA SMART 2.0'
+            }
+          })
+        );
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}/state`,
+          state ? 'ON' : 'OFF',
+          { retain: true }
+        );
+        });
+      }
+      
+      const diCount = controllerData.DI?.length || 0;
+      const doCount = controllerData.DO?.length || 0;
+      logger.debug(`Published ${controllerKey} sensors: ${diCount} DI, ${doCount} DO`);
+    });
   }
 }
 

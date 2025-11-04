@@ -1,11 +1,13 @@
 import express, { Express, Request, Response } from 'express';
 import dotenv from 'dotenv';
+
+// Load environment variables FIRST before importing logger
+dotenv.config();
+
 import logger from './logger';
 import RehauAuthPersistent from './rehau-auth';
 import RehauMQTTBridge from './mqtt-bridge';
 import ClimateController from './climate-controller';
-
-dotenv.config();
 
 const app: Express = express();
 app.use(express.json());
@@ -187,10 +189,42 @@ app.post('/api/climate/:installId/mode', async (req: Request, res: Response) => 
   }
 });
 
-// Start the application
-async function start(): Promise<void> {
+// Start application
+async function start() {
   try {
-    logger.info('Starting REHAU NEA SMART 2.0 MQTT Bridge (TypeScript)...');
+    // Print debug mode warning if enabled
+    const logLevel = process.env.LOG_LEVEL || 'info';
+    if (logLevel === 'debug') {
+      logger.warn('═══════════════════════════════════════════════════════════════');
+      logger.warn('⚠️  DEBUG MODE ENABLED - DETAILED LOGGING ACTIVE');
+      logger.warn('═══════════════════════════════════════════════════════════════');
+      logger.warn('');
+      logger.warn('Debug mode logs contain:');
+      logger.warn('  • Full MQTT message dumps');
+      logger.warn('  • Complete API responses');
+      logger.warn('  • System configuration details');
+      logger.warn('');
+      logger.warn('⚠️  SECURITY WARNING:');
+      logger.warn('  While sensitive data is redacted, logs may still contain:');
+      logger.warn('  • Partial email addresses');
+      logger.warn('  • Installation names and IDs');
+      logger.warn('  • Zone names and configuration');
+      logger.warn('  • System structure and behavior');
+      logger.warn('');
+      logger.warn('📋 Before sharing logs:');
+      logger.warn('  1. Review all output carefully');
+      logger.warn('  2. Check for any personal information');
+      logger.warn('  3. Verify redaction is working correctly');
+      logger.warn('  4. Look for [DUMP] markers for detailed data');
+      logger.warn('');
+      logger.warn('💡 Debug logs are useful for:');
+      logger.warn('  • Troubleshooting connection issues');
+      logger.warn('  • Understanding message formats');
+      logger.warn('  • Sharing with developers for parser improvements');
+      logger.warn('');
+      logger.warn('═══════════════════════════════════════════════════════════════');
+      logger.warn('');
+    }
     
     // Authenticate with REHAU
     logger.info('Authenticating with REHAU...');
@@ -226,6 +260,24 @@ async function start(): Promise<void> {
     });
     
     logger.info('REHAU NEA SMART 2.0 MQTT Bridge started successfully');
+    
+    // Request LIVE data for all installations (initial)
+    logger.info('Requesting initial LIVE data from installations...');
+    for (const install of installs) {
+      // Request LIVE_EMU (mixed circuits, pumps, temperatures)
+      mqttBridge.requestLiveData(install.unique, 1);
+      
+      // Wait a bit before requesting next type
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Request LIVE_DIDO (digital inputs/outputs)
+      mqttBridge.requestLiveData(install.unique, 0);
+    }
+    
+    // Start periodic LIVE data polling (every 5 minutes)
+    const liveDataInterval = parseInt(process.env.LIVE_DATA_INTERVAL || '300'); // Default 5 minutes
+    const installUniques = installs.map(i => i.unique);
+    mqttBridge.startLiveDataPolling(installUniques, liveDataInterval);
     
     // Start zone reloading with configurable interval
     startPolling();

@@ -1,6 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import crypto from 'crypto';
-import logger from './logger';
+import logger, { debugDump } from './logger';
 import { RehauTokenResponse, RehauInstallation } from './types';
 
 interface InstallInfo {
@@ -254,6 +254,12 @@ class RehauAuthPersistent {
         { headers }
       );
 
+      // Log HTTP response details
+      logger.info(`getUserData HTTP Response: status=${response.status}`);
+      logger.debug('Response headers:', response.headers);
+      
+      debugDump('getUserData API Response', response.data);
+
       if (response.data.success) {
         const user = response.data.data.user;
         this.installs = user.installs.map(install => ({
@@ -263,7 +269,12 @@ class RehauAuthPersistent {
         }));
         logger.info(`Found ${this.installs.length} installation(s)`);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.response) {
+        logger.error(`getUserData HTTP Error: status=${error.response.status}`);
+        logger.error('Error response headers:', error.response.headers);
+        logger.error('Error response body:', error.response.data);
+      }
       logger.warn('Failed to get user info:', (error as Error).message);
     }
   }
@@ -362,32 +373,49 @@ class RehauAuthPersistent {
    * Get full installation data including zones and controllers
    */
   async getInstallationData(install: InstallInfo): Promise<RehauInstallation> {
-    const installIds = this.installs.map(i => i._id).join(',');
-    const url = `https://api.nea2aws.aws.rehau.cloud/v2/users/${this.email}/getDataofInstall` +
-                `?demand=${install._id}` +
-                `&installsList=${installIds}`;
-    
-    const response = await axios.get(url, {
-      headers: {
-        'Authorization': this.accessToken!,
-        'Accept': 'application/json',
-        'Origin': 'http://android.neasmart.de',
-        'Referer': 'http://android.neasmart.de/',
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36'
-      }
-    });
+    try {
+      const installIds = this.installs.map(i => i._id).join(',');
+      const url = `https://api.nea2aws.aws.rehau.cloud/v2/users/${this.email}/getDataofInstall` +
+                  `?demand=${install._id}` +
+                  `&installsList=${installIds}`;
+      
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': this.accessToken!,
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+          'Origin': 'http://android.neasmart.de',
+          'Referer': 'http://android.neasmart.de/',
+          'Accept': 'application/json, text/plain, */*',
+          'Content-Type': 'application/json'
+        }
+      });
 
-    if (response.data && (response.data.success || response.data.data)) {
-      const user = response.data.data?.user || response.data.user;
-      if (user && user.installs && user.installs.length > 0) {
-        const fullInstall = user.installs.find((i: RehauInstallation) => i.unique === install.unique);
-        if (fullInstall) {
-          return fullInstall;
+      // Log HTTP response details
+      logger.info(`getInstallationData HTTP Response: status=${response.status}`);
+      logger.debug('Response headers:', response.headers);
+      
+      // Use condensed format for large installation data
+      debugDump('getInstallationData API Response', response.data, true);
+
+      if (response.data && (response.data.success || response.data.data)) {
+        const user = response.data.data?.user || response.data.user;
+        if (user && user.installs && user.installs.length > 0) {
+          const fullInstall = user.installs.find((i: RehauInstallation) => i.unique === install.unique);
+          if (fullInstall) {
+            return fullInstall;
+          }
         }
       }
+      
+      throw new Error('Failed to get installation data');
+    } catch (error: any) {
+      if (error.response) {
+        logger.error(`getInstallationData HTTP Error: status=${error.response.status}`);
+        logger.error('Error response headers:', error.response.headers);
+        logger.error('Error response body:', error.response.data);
+      }
+      throw error;
     }
-    
-    throw new Error('Failed to get installation data');
   }
 }
 

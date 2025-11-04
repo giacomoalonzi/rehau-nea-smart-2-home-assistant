@@ -81,6 +81,39 @@ export interface RehauMQTTMessage {
   [key: string]: unknown;
 }
 
+export interface LiveEMUData {
+  success: boolean;
+  type: 'live_data';
+  data: {
+    data: {
+      [key: string]: {
+        pumpOn: number;
+        mixed_circuit1_setpoint: number;
+        mixed_circuit1_supply: number;
+        mixed_circuit1_return: number;
+        mixed_circuit1_opening: number;
+      };
+    };
+    unique: string;
+    type: 'LIVE_EMU';
+  };
+}
+
+export interface LiveDIDOData {
+  success: boolean;
+  type: 'live_data';
+  data: {
+    data: {
+      [key: string]: {
+        DI: boolean[];
+        DO: boolean[];
+      };
+    };
+    unique: string;
+    type: 'LIVE_DIDO';
+  };
+}
+
 export interface RehauChannelUpdateMessage {
   type: 'channel_update';
   success: boolean;

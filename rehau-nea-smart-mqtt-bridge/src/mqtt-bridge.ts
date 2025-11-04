@@ -1,6 +1,6 @@
 import mqtt, { MqttClient, IClientOptions, IClientPublishOptions } from 'mqtt';
 import LZString from 'lz-string';
-import logger from './logger';
+import logger, { debugDump, redactSensitiveData } from './logger';
 import RehauAuthPersistent from './rehau-auth';
 import { MQTTConfig, RehauMQTTMessage, ReferentialEntry, ReferentialsMap, HACommand } from './types';
 
@@ -15,6 +15,10 @@ class RehauMQTTBridge {
   private messageHandlers: MessageHandler[] = [];
   private referentials: ReferentialsMap | null = null;
   private referentialsTimer: NodeJS.Timeout | null = null;
+  private liveDataTimer: NodeJS.Timeout | null = null;
+  private rehauSubscriptions: Set<string> = new Set();
+  private haSubscriptions: Set<string> = new Set();
+  private installations: string[] = [];
 
   constructor(rehauAuth: RehauAuthPersistent, mqttConfig: MQTTConfig) {
     this.rehauAuth = rehauAuth;
@@ -84,10 +88,27 @@ class RehauMQTTBridge {
         this.rehauClient!.subscribe(userTopic, (err) => {
           if (!err) {
             logger.info(`Subscribed to REHAU user topic: ${userTopic}`);
+            this.rehauSubscriptions.add(userTopic);
           } else {
             logger.error('Failed to subscribe to REHAU user topic:', err);
           }
         });
+        
+        // Re-subscribe to all previously subscribed topics (for reconnection)
+        if (this.rehauSubscriptions.size > 1) {
+          logger.info(`Re-subscribing to ${this.rehauSubscriptions.size - 1} REHAU topics...`);
+          this.rehauSubscriptions.forEach(topic => {
+            if (topic !== userTopic) {
+              this.rehauClient!.subscribe(topic, (err) => {
+                if (!err) {
+                  logger.debug(`Re-subscribed to REHAU topic: ${topic}`);
+                } else {
+                  logger.error(`Failed to re-subscribe to ${topic}:`, err);
+                }
+              });
+            }
+          });
+        }
         
         resolve();
       });
@@ -139,6 +160,21 @@ class RehauMQTTBridge {
 
       this.haClient.on('connect', () => {
         logger.info('Connected to Home Assistant MQTT broker');
+        
+        // Re-subscribe to all previously subscribed topics (for reconnection)
+        if (this.haSubscriptions.size > 0) {
+          logger.info(`Re-subscribing to ${this.haSubscriptions.size} Home Assistant topics...`);
+          this.haSubscriptions.forEach(topic => {
+            this.haClient!.subscribe(topic, (err) => {
+              if (!err) {
+                logger.debug(`Re-subscribed to HA topic: ${topic}`);
+              } else {
+                logger.error(`Failed to re-subscribe to ${topic}:`, err);
+              }
+            });
+          });
+        }
+        
         resolve();
       });
 
@@ -168,6 +204,7 @@ class RehauMQTTBridge {
       this.rehauClient!.subscribe(topic, (err) => {
         if (!err) {
           logger.info(`Subscribed to installation: ${topic}`);
+          this.rehauSubscriptions.add(topic);
           resolve();
         } else {
           logger.error(`Failed to subscribe to ${topic}:`, err);
@@ -181,6 +218,15 @@ class RehauMQTTBridge {
     try {
       const payload: RehauMQTTMessage = JSON.parse(message.toString());
       logger.debug('REHAU message received:', { topic, type: payload.type });
+      
+      // Check for LIVE data responses
+      if (payload.type === 'LIVE_EMU' || payload.type === 'LIVE_DIDO') {
+        logger.info(`Received ${payload.type} data`);
+        debugDump(`${payload.type} Response`, payload, true);
+      } else {
+        // Full message dump in debug mode (with redacted sensitive data)
+        debugDump(`REHAU MQTT Message [${topic}]`, payload);
+      }
       
       // Notify all registered handlers
       this.messageHandlers.forEach(handler => {
@@ -199,6 +245,9 @@ class RehauMQTTBridge {
     try {
       const payload = message.toString();
       logger.debug('Home Assistant message received:', { topic, payload });
+      
+      // Full message dump in debug mode
+      debugDump(`Home Assistant MQTT Message [${topic}]`, { topic, payload });
       
       // Handle command messages from Home Assistant
       if (topic.includes('_command')) {
@@ -253,6 +302,7 @@ class RehauMQTTBridge {
     this.haClient.subscribe(topic, (err) => {
       if (!err) {
         logger.debug(`Subscribed to HA topic: ${topic}`);
+        this.haSubscriptions.add(topic);
       } else {
         logger.error(`Failed to subscribe to ${topic}:`, err);
       }
@@ -286,7 +336,9 @@ class RehauMQTTBridge {
       if (err) {
         logger.error('Failed to publish to REHAU:', err);
       } else {
-        logger.debug('Published to REHAU:', { topic, payload });
+        // Redact sensitive data before logging
+        const redactedPayload = typeof payload === 'object' ? redactSensitiveData(payload) : payload;
+        debugDump(`Published to REHAU [${topic}]`, redactedPayload);
       }
     });
   }
@@ -297,11 +349,76 @@ class RehauMQTTBridge {
            !!this.haClient?.connected;
   }
 
+  /**
+   * Request live data from REHAU system
+   * @param installUnique - Installation unique ID
+   * @param dataType - 0 for LIVE_DIDO (digital I/O), 1 for LIVE_EMU (mixed circuits/pumps)
+   */
+  requestLiveData(installUnique: string, dataType: 0 | 1): void {
+    const topic = `client/${installUnique}`;
+    const message = {
+      "11": "REQ_LIVE",
+      "12": {
+        "DATA": dataType
+      }
+    };
+    
+    const typeName = dataType === 0 ? 'LIVE_DIDO' : 'LIVE_EMU';
+    logger.debug(`Requesting ${typeName} data for installation ${installUnique}`);
+    this.publishToRehau(topic, message);
+  }
+
+  /**
+   * Start periodic LIVE data polling
+   * @param installUniques - Array of installation unique IDs to poll
+   * @param intervalSeconds - Polling interval in seconds (default: 300 = 5 minutes)
+   */
+  startLiveDataPolling(installUniques: string[], intervalSeconds: number = 300): void {
+    this.installations = installUniques;
+    
+    // Clear existing timer if any
+    if (this.liveDataTimer) {
+      clearInterval(this.liveDataTimer);
+    }
+    
+    // Set up periodic polling
+    this.liveDataTimer = setInterval(() => {
+      if (this.rehauClient?.connected) {
+        this.installations.forEach(installUnique => {
+          // Request LIVE_EMU (mixed circuits)
+          this.requestLiveData(installUnique, 1);
+          
+          // Request LIVE_DIDO (digital I/O) after a short delay
+          setTimeout(() => {
+            this.requestLiveData(installUnique, 0);
+          }, 1000);
+        });
+      }
+    }, intervalSeconds * 1000);
+    
+    logger.info(`LIVE data polling started: every ${intervalSeconds} seconds for ${installUniques.length} installation(s)`);
+  }
+
+  /**
+   * Stop LIVE data polling
+   */
+  stopLiveDataPolling(): void {
+    if (this.liveDataTimer) {
+      clearInterval(this.liveDataTimer);
+      this.liveDataTimer = null;
+      logger.info('LIVE data polling stopped');
+    }
+  }
+
   async disconnect(): Promise<void> {
     logger.info('Disconnecting from MQTT brokers...');
     
     if (this.referentialsTimer) {
       clearInterval(this.referentialsTimer);
+    }
+    
+    if (this.liveDataTimer) {
+      clearInterval(this.liveDataTimer);
     }
     
     if (this.rehauClient) {
