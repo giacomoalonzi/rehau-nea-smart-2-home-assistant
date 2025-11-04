@@ -982,11 +982,14 @@ class ClimateController {
           }
         })
       );
-      this.mqttBridge.publishToHomeAssistant(
-        `${baseTopic}_setpoint/state`,
-        (mcData.mixed_circuit1_setpoint / 10).toFixed(1),
-        { retain: true }
-      );
+      const setpointC = this.convertTemp(mcData.mixed_circuit1_setpoint);
+      if (setpointC !== null) {
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}_setpoint/state`,
+          setpointC.toString(),
+          { retain: true }
+        );
+      }
       
       // Publish supply temperature
       this.mqttBridge.publishToHomeAssistant(
@@ -1006,11 +1009,14 @@ class ClimateController {
           }
         })
       );
-      this.mqttBridge.publishToHomeAssistant(
-        `${baseTopic}_supply/state`,
-        (mcData.mixed_circuit1_supply / 10).toFixed(1),
-        { retain: true }
-      );
+      const supplyC = this.convertTemp(mcData.mixed_circuit1_supply);
+      if (supplyC !== null) {
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}_supply/state`,
+          supplyC.toString(),
+          { retain: true }
+        );
+      }
       
       // Publish return temperature
       this.mqttBridge.publishToHomeAssistant(
@@ -1030,11 +1036,14 @@ class ClimateController {
           }
         })
       );
-      this.mqttBridge.publishToHomeAssistant(
-        `${baseTopic}_return/state`,
-        (mcData.mixed_circuit1_return / 10).toFixed(1),
-        { retain: true }
-      );
+      const returnC = this.convertTemp(mcData.mixed_circuit1_return);
+      if (returnC !== null) {
+        this.mqttBridge.publishToHomeAssistant(
+          `${baseTopic}_return/state`,
+          returnC.toString(),
+          { retain: true }
+        );
+      }
       
       // Publish valve opening percentage
       this.mqttBridge.publishToHomeAssistant(
@@ -1060,7 +1069,8 @@ class ClimateController {
         { retain: true }
       );
       
-      logger.debug(`Published ${mcKey} sensors: pump=${mcData.pumpOn}, setpoint=${mcData.mixed_circuit1_setpoint/10}°C`);
+      const setpointForLog = this.convertTemp(mcData.mixed_circuit1_setpoint);
+      logger.debug(`Published ${mcKey} sensors: pump=${mcData.pumpOn}, setpoint=${setpointForLog}°C`);
     });
   }
 
