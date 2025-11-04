@@ -13,7 +13,11 @@
     "test:auth": "ts-node test-auth-only.ts",
     "test:rehau": "ts-node test-rehau-only.ts",
     "parseUserData": "ts-node src/parsers/cli-user-data.ts",
-    "parseInstallationData": "ts-node src/parsers/cli-installation-data.ts"
+    "parseUserDataV2": "ts-node src/parsers/cli-user-data-v2.ts",
+    "parseInstallationData": "ts-node src/parsers/cli-installation-data.ts",
+    "parseInstallationV2": "ts-node src/parsers/cli-installation-data-v2.ts",
+    "compareParsers": "ts-node src/parsers/compare-parsers.ts",
+    "testValidation": "ts-node src/parsers/test-validation.ts"
   },
   "keywords": [
     "rehau",

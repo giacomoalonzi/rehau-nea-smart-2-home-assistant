@@ -23,11 +23,13 @@ function main(): void {
     console.log('');
     console.log('Options:');
     console.log('  --summary           Output human-readable summary instead of JSON');
+    console.log('  --typed             Output only typed properties (exclude raw data)');
     console.log('  --unique <id>       Parse specific installation by unique ID');
     console.log('');
     console.log('Examples:');
     console.log('  npm run parseInstallationData -- install-data.json');
     console.log('  npm run parseInstallationData -- install-data.json --summary');
+    console.log('  npm run parseInstallationData -- install-data.json --typed');
     console.log('  npm run parseInstallationData -- install-data.json --unique ABC123DEF456');
     process.exit(0);
   }
@@ -42,6 +44,9 @@ function main(): void {
   
   // Check if summary mode is requested
   const summaryMode = args.includes('--summary');
+  
+  // Check if typed mode is requested
+  const typedMode = args.includes('--typed');
   
   // Check if unique ID is provided
   let uniqueId: string | undefined;
@@ -70,6 +75,44 @@ function main(): void {
     // Output
     if (summaryMode) {
       console.log(parser.getSummary(result));
+    } else if (typedMode) {
+      // Output only typed properties (exclude raw)
+      const removeRaw = (obj: any): any => {
+        if (obj === null || obj === undefined) return obj;
+        if (Array.isArray(obj)) return obj.map(removeRaw);
+        if (typeof obj === 'object') {
+          const cleaned: any = {};
+          for (const key in obj) {
+            if (key !== 'raw') {
+              cleaned[key] = removeRaw(obj[key]);
+            }
+          }
+          return cleaned;
+        }
+        return obj;
+      };
+      
+      const output = removeRaw({
+        id: result.id,
+        unique: result.unique,
+        name: result.name,
+        address: result.address,
+        version: result.version,
+        connectionState: result.connectionState,
+        timezone: result.timezone,
+        absenceLevel: result.absenceLevel,
+        geoInstallActive: result.geoInstallActive,
+        outsideTemperature: result.outsideTemperature,
+        outsideTemperatureFiltered: result.outsideTemperatureFiltered,
+        coolingConditions: result.coolingConditions,
+        operationMode: result.operationMode,
+        numberOfControllers: result.numberOfControllers,
+        numberOfMixedCircuits: result.numberOfMixedCircuits,
+        controllers: result.controllers,
+        groups: result.groups,
+        mixedCircuits: result.mixedCircuits,
+      });
+      console.log(JSON.stringify(output, null, 2));
     } else {
       // Output parsed data as JSON (without raw response)
       const output = {

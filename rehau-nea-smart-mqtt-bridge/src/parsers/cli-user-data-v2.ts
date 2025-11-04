@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * CLI tool to parse getUserData API responses
+ * CLI tool to parse getUserData API responses using Parser V2
  * 
  * Usage:
- *   npm run parseUserData -- <filename>
- *   npm run parseUserData -- <filename> --summary
+ *   npm run parseUserDataV2 -- <filename>
+ *   npm run parseUserDataV2 -- <filename> --summary
+ *   npm run parseUserDataV2 -- <filename> --typed
  */
 
-import { UserDataParser } from './user-data-parser';
+import { UserDataParserV2 } from './user-data-parser-v2';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -15,19 +16,19 @@ function main(): void {
   const args = process.argv.slice(2);
   
   if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
-    console.log('Usage: npm run parseUserData -- <filename> [options]');
+    console.log('Usage: npm run parseUserDataV2 -- <filename> [options]');
     console.log('');
     console.log('Arguments:');
-    console.log('  <filename>   Path to JSON file containing getUserData response');
+    console.log('  <filename>        Path to JSON file containing getUserData response');
     console.log('');
     console.log('Options:');
-    console.log('  --summary    Output human-readable summary instead of JSON');
-    console.log('  --typed      Output only typed properties (exclude raw data)');
+    console.log('  --summary         Output human-readable summary instead of JSON');
+    console.log('  --typed           Output only typed properties (exclude raw data)');
     console.log('');
     console.log('Examples:');
-    console.log('  npm run parseUserData -- user-data.json');
-    console.log('  npm run parseUserData -- user-data.json --summary');
-    console.log('  npm run parseUserData -- user-data.json --typed');
+    console.log('  npm run parseUserDataV2 -- userdata.json');
+    console.log('  npm run parseUserDataV2 -- userdata.json --summary');
+    console.log('  npm run parseUserDataV2 -- userdata.json --typed');
     process.exit(0);
   }
   
@@ -35,7 +36,7 @@ function main(): void {
   const filename = args.find(arg => !arg.startsWith('--'));
   if (!filename) {
     console.error('Error: No filename provided');
-    console.error('Usage: npm run parseUserData -- <filename> [--summary]');
+    console.error('Usage: npm run parseUserDataV2 -- <filename> [options]');
     process.exit(1);
   }
   
@@ -59,7 +60,7 @@ function main(): void {
     const jsonContent = fs.readFileSync(filePath, 'utf-8');
     
     // Parse
-    const parser = new UserDataParser();
+    const parser = new UserDataParserV2();
     const result = parser.parseFromJson(jsonContent);
     
     // Output
@@ -67,34 +68,17 @@ function main(): void {
       console.log(parser.getSummary(result));
     } else if (typedMode) {
       // Output only typed properties (exclude raw)
-      const removeRaw = (obj: any): any => {
-        if (obj === null || obj === undefined) return obj;
-        if (Array.isArray(obj)) return obj.map(removeRaw);
-        if (typeof obj === 'object') {
-          const cleaned: any = {};
-          for (const key in obj) {
-            if (key !== 'raw') {
-              cleaned[key] = removeRaw(obj[key]);
-            }
-          }
-          return cleaned;
-        }
-        return obj;
-      };
-      
-      const output = removeRaw({
-        userId: result.userId,
-        email: result.email,
-        userName: result.userName,
-        installations: result.installations,
-      });
+      const output = parser.getTyped(result);
       console.log(JSON.stringify(output, null, 2));
     } else {
       // Output parsed data as JSON (without raw response)
       const output = {
-        userId: result.userId,
+        id: result.id,
         email: result.email,
-        userName: result.userName,
+        createdAt: result.createdAt,
+        language: result.language,
+        roles: result.roles,
+        geofencing: result.geofencing,
         installations: result.installations,
       };
       console.log(JSON.stringify(output, null, 2));
