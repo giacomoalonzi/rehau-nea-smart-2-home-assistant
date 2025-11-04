@@ -459,16 +459,15 @@ class ClimateController {
         model: 'NEA SMART 2.0',
         sw_version: '1.0.0'
       },
-      schema: 'template',
       state_topic: `homeassistant/light/rehau_${zoneId}_ring_light/state`,
       command_topic: `homeassistant/light/rehau_${zoneId}_ring_light/command`,
-      state_template: '{{ value }}',
-      command_on_template: 'ON',
-      command_off_template: 'OFF',
+      payload_on: 'ON',
+      payload_off: 'OFF',
       availability_topic: `homeassistant/light/rehau_${zoneId}_ring_light/availability`,
       payload_available: 'online',
       payload_not_available: 'offline',
-      optimistic: true
+      optimistic: true,
+      icon: 'mdi:lightbulb'
     };
     
     // Publish discovery configs
