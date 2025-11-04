@@ -24,12 +24,23 @@ export function redactSensitiveData(obj: any): any {
   const sensitiveKeys = [
     'password', 'token', 'access_token', 'refresh_token', 'id_token',
     'authorization', 'auth', 'secret', 'api_key', 'apikey',
-    'email', 'username', 'user', 'login', 'credential'
+    'email', 'username', 'login', 'credential',
+    // Address fields
+    'address', 'street', 'city', 'zip', 'postal', 'country',
+    'latitude', 'longitude', 'lat', 'lng', 'location'
   ];
   
   for (const [key, value] of Object.entries(obj)) {
     const lowerKey = key.toLowerCase();
-    const isSensitive = sensitiveKeys.some(sk => lowerKey.includes(sk));
+    
+    // Check if key exactly matches or contains sensitive keywords
+    // But exclude 'user' as a standalone key (it's usually an object container)
+    const isSensitive = sensitiveKeys.some(sk => {
+      if (sk === 'user' && lowerKey === 'user') {
+        return false; // Don't redact 'user' object itself
+      }
+      return lowerKey.includes(sk);
+    });
     
     if (isSensitive) {
       if (typeof value === 'string' && value.length > 0) {
@@ -39,6 +50,9 @@ export function redactSensitiveData(obj: any): any {
         } else {
           redacted[key] = `${value.substring(0, 2)}...${value.substring(value.length - 2)}`;
         }
+      } else if (typeof value === 'number') {
+        // Redact numbers (lat/lng, zip codes, etc.)
+        redacted[key] = '[REDACTED]';
       } else {
         redacted[key] = '[REDACTED]';
       }
