@@ -255,11 +255,9 @@ class RehauAuthPersistent {
       );
 
       // Log HTTP response details
-      logger.debug('getUserData HTTP Response:', {
-        status: response.status,
-        headers: response.headers,
-        bodyKeys: Object.keys(response.data || {})
-      });
+      logger.info(`getUserData HTTP Response: status=${response.status}`);
+      logger.debug('Response headers:', response.headers);
+      logger.debug('Response body keys:', Object.keys(response.data || {}));
       
       debugDump('getUserData API Response', response.data);
 
@@ -274,11 +272,9 @@ class RehauAuthPersistent {
       }
     } catch (error: any) {
       if (error.response) {
-        logger.error('getUserData HTTP Error:', {
-          status: error.response.status,
-          headers: error.response.headers,
-          body: error.response.data
-        });
+        logger.error(`getUserData HTTP Error: status=${error.response.status}`);
+        logger.error('Error response headers:', error.response.headers);
+        logger.error('Error response body:', error.response.data);
       }
       logger.warn('Failed to get user info:', (error as Error).message);
     }
@@ -396,11 +392,9 @@ class RehauAuthPersistent {
       });
 
       // Log HTTP response details
-      logger.debug('getInstallationData HTTP Response:', {
-        status: response.status,
-        headers: response.headers,
-        bodyKeys: Object.keys(response.data || {})
-      });
+      logger.info(`getInstallationData HTTP Response: status=${response.status}`);
+      logger.debug('Response headers:', response.headers);
+      logger.debug('Response body keys:', Object.keys(response.data || {}));
       
       debugDump('getInstallationData API Response', response.data);
 
@@ -417,11 +411,9 @@ class RehauAuthPersistent {
       throw new Error('Failed to get installation data');
     } catch (error: any) {
       if (error.response) {
-        logger.error('getInstallationData HTTP Error:', {
-          status: error.response.status,
-          headers: error.response.headers,
-          body: error.response.data
-        });
+        logger.error(`getInstallationData HTTP Error: status=${error.response.status}`);
+        logger.error('Error response headers:', error.response.headers);
+        logger.error('Error response body:', error.response.data);
       }
       throw error;
     }
