@@ -30,40 +30,16 @@ options:
   referentials_reload_interval: 86400
   use_group_in_names: false
 schema:
-  rehau_email:
-    name: REHAU Account Email
-    description: Your REHAU NEA SMART account email address
-  rehau_password:
-    name: REHAU Account Password
-    description: Your REHAU NEA SMART account password
-  mqtt_host:
-    name: MQTT Broker Host
-    description: MQTT broker hostname (usually 'core-mosquitto' for Mosquitto add-on)
-  mqtt_port:
-    name: MQTT Broker Port
-    description: MQTT broker port (default 1883)
-  mqtt_user:
-    name: MQTT Username (optional)
-    description: MQTT username if authentication is enabled (leave empty if not using auth)
-  mqtt_password:
-    name: MQTT Password (optional)
-    description: MQTT password if authentication is enabled (leave empty if not using auth)
-  api_port:
-    name: REST API Port
-    description: Port for the REST API (default 3000)
-  log_level:
-    name: Log Level
-    description: Logging verbosity (info=recommended, debug=detailed troubleshooting)
-  zone_reload_interval:
-    name: Zone Reload Interval (seconds)
-    description: How often to reload zone data (default 300 = 5 minutes, range 30-3600)
-  token_refresh_interval:
-    name: Token Refresh Interval (seconds)
-    description: How often to refresh authentication token (default 21600 = 6 hours, range 1800-86400)
-  referentials_reload_interval:
-    name: Referentials Reload Interval (seconds)
-    description: How often to reload system referentials (default 86400 = 24 hours, range 3600-604800)
-  use_group_in_names:
-    name: Use Group Names in Display Names
-    description: Include group names in entity display names (false=zone only, true=group+zone)
+  rehau_email: email
+  rehau_password: password
+  mqtt_host: str
+  mqtt_port: port
+  mqtt_user: str?
+  mqtt_password: password?
+  api_port: port
+  log_level: list(debug|info|warn|error)
+  zone_reload_interval: "int(30,3600)?"
+  token_refresh_interval: "int(1800,86400)?"
+  referentials_reload_interval: "int(3600,604800)?"
+  use_group_in_names: bool?
 documentation: https://github.com/manuxio/rehau-nea-smart-2-home-assistant/blob/main/rehau-nea-smart-mqtt-bridge/README.md
