@@ -42,3 +42,4 @@ schema:
   token_refresh_interval: int(1800,86400)?
   referentials_reload_interval: int(3600,604800)?
   use_group_in_names: bool?
+documentation: https://github.com/manuxio/rehau-nea-smart-2-home-assistant/blob/main/rehau-nea-smart-mqtt-bridge/README.md
