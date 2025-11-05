@@ -1,7 +1,7 @@
 name: REHAU NEA SMART 2.0 MQTT Bridge
-version: "2.1.0"
+version: "2.2.0"
 slug: rehau_nea_smart_mqtt
-description: TypeScript-based MQTT bridge for REHAU NEA SMART 2.0 heating systems with LIVE data sensors and enhanced debugging
+description: TypeScript-based MQTT bridge for REHAU NEA SMART 2.0 heating systems with typed interfaces, ring light & lock control
 arch:
   - aarch64
   - amd64
@@ -27,6 +27,7 @@ options:
   zone_reload_interval: 300
   token_refresh_interval: 21600
   referentials_reload_interval: 86400
+  use_group_in_names: false
 schema:
   rehau_email: str
   rehau_password: password
@@ -39,3 +40,4 @@ schema:
   zone_reload_interval: int(30,3600)?
   token_refresh_interval: int(1800,86400)?
   referentials_reload_interval: int(3600,604800)?
+  use_group_in_names: bool?

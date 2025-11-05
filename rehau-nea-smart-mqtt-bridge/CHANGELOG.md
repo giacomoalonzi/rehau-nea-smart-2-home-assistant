@@ -1,5 +1,84 @@
 # Changelog
 
+## [2.2.0] - 2025-11-05
+
+### ⚠️ BREAKING CHANGES
+- **Entity IDs have changed** for better consistency and future compatibility
+  - Climate entities: `climate.rehau_<install>_<group>_<zone>` (always includes group name)
+  - Sensor entities: `sensor.rehau_<group>_<zone>_<type>` (always includes group name)
+  - Lock entities: `lock.rehau_<group>_<zone>_lock` (changed from switch to lock platform)
+  - Light entities: `light.rehau_<group>_<zone>_ring_light`
+  - **Migration required**: Update automations, dashboards, and scripts with new entity IDs
+
+### Added
+- **V2 Parsers with Typed Interfaces**
+  - Complete TypeScript interfaces for all REHAU data structures
+  - Runtime validation ensures data integrity
+  - Pre-converted temperatures (Celsius) in typed objects
+  - `getTyped()` method returns clean objects without raw fields
+  - `getSummary()` method for human-readable output
+- **Ring Light Control** (new entity per zone)
+  - Control LED ring on physical thermostats
+  - Entity: `light.rehau_<group>_<zone>_ring_light`
+  - Real-time state updates from REHAU
+- **Lock Control** (new entity per zone)
+  - Lock/unlock manual control on physical thermostats
+  - Entity: `lock.rehau_<group>_<zone>_lock` (proper lock platform)
+  - Prevents unauthorized changes when locked
+- **MQTT Structure Tree Visualization**
+  - Prints complete entity structure after initialization
+  - Shows all topics, entity IDs, and current states
+  - Displays after each zone reload cycle
+- **Enhanced REHAU MQTT Logging**
+  - Detailed info-level logging for all REHAU messages
+  - Shows exactly what changed (temp, setpoint, mode, ring light, lock)
+  - Human-readable mode names (comfort, away, standby, off)
+  - Example: `Updates: setpoint_heat=22.0°C, mode=comfort, ring_light=ON`
+- **USE_GROUP_IN_NAMES Configuration**
+  - Controls display names (not entity IDs)
+  - `false`: Display names show only zone (e.g., "Salone")
+  - `true`: Display names include group (e.g., "Atilio Salone")
+  - Entity IDs always include group name for consistency
+
+### Fixed
+- **MQTT Subscription Handling**
+  - Subscriptions now queued even when HA MQTT not connected yet
+  - Automatic resubscription on reconnection
+  - Ring light and lock commands now properly received
+- **Entity Platform Issues**
+  - Lock now uses proper `lock` platform (was `switch`)
+  - Lock states: LOCKED/UNLOCKED (was ON/OFF)
+  - Lock commands: LOCK/UNLOCK (was ON/OFF)
+  - Light now uses default MQTT light schema with explicit icon
+  - Fixed "thunder" icon issue - entities now show proper icons
+- **Entity ID Consistency**
+  - Group names always included in entity IDs
+  - Stable zone IDs used in MQTT topics
+  - No more duplicate installation names in entity IDs
+  - Hierarchical naming: install → group → zone
+
+### Changed
+- **All Controllable Entities Set to Optimistic**
+  - Climate controls (mode, preset, temperature)
+  - Ring light switch
+  - Lock switch
+  - Instant UI feedback without waiting for confirmation
+- **MQTT Topic Structure**
+  - Sensors use zone IDs: `homeassistant/sensor/rehau_<zoneId>_<type>/`
+  - Locks use lock platform: `homeassistant/lock/rehau_<zoneId>_lock/`
+  - Cleaner, more stable topic paths
+- **Documentation**
+  - Comprehensive entity types table in README
+  - BREAKING CHANGES section with migration guide
+  - Updated all examples to use "domodreams" (was "cappelleri")
+  - Clear explanation of entity IDs vs display names
+
+### Developer
+- Migrated entire application to use V2 parsers
+- Separate handlers for typed data vs raw MQTT data
+- Better type safety throughout the codebase
+- Runtime validation prevents raw fields from leaking through
+
 ## [2.1.0] - 2025-11-04
 
 ### Added
