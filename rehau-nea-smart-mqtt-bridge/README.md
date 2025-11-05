@@ -2,6 +2,8 @@
 
 TypeScript-based MQTT bridge for REHAU NEA SMART 2.0 heating systems.
 
+> **⚠️ IMPORTANT:** Version 2.0+ introduces breaking changes. See [BREAKING CHANGES](#️-breaking-changes) below and [CHANGELOG](CHANGELOG.md#220---2025-11-05) for full details.
+
 ## ⚠️ BREAKING CHANGES
 
 **Version 2.0+ introduces new entity IDs for better consistency and future compatibility.**
