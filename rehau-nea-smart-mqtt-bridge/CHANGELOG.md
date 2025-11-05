@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.6] - 2025-11-05
+
+### Improved
+- Added emojis to all remaining log messages for consistency
+- Installation subscription logs now have emojis (📡 📥 ✅)
+- Startup sequence logs now have emojis (🔐 📍 🔌 🚀)
+- Shutdown logs now have emojis (🛑)
+- All info-level logs now have visual indicators for easy scanning
+
 ## [2.2.5] - 2025-11-05
 
 ### Improved

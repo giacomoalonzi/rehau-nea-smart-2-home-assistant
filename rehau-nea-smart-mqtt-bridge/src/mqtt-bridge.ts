@@ -237,7 +237,7 @@ class RehauMQTTBridge {
     return new Promise((resolve, reject) => {
       this.rehauClient!.subscribe(topic, (err) => {
         if (!err) {
-          logger.info(`Subscribed to installation: ${topic}`);
+          logger.info(`✅ Subscribed to installation: ${topic}`);
           this.rehauSubscriptions.add(topic);
           resolve();
         } else {
