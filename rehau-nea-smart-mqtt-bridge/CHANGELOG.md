@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.1] - 2025-11-05
+
+### Fixed
+- Changed maintainer attribution from "REHAU" to "DomoDreams"
+- Added documentation URL to config.yaml
+
+### Documentation
+- Added comprehensive DOCS.md with detailed configuration explanations
+- Added prominent breaking changes warning to main repository README
+- All configuration options now documented with examples and troubleshooting
+- Documentation accessible directly in Home Assistant add-on UI
+
 ## [2.2.0] - 2025-11-05
 
 ### ⚠️ BREAKING CHANGES
