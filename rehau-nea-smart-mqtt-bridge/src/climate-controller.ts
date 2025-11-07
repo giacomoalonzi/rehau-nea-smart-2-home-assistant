@@ -1437,8 +1437,9 @@ class ClimateController {
     }
     
     try {
-      const ringLightValue = payload === 'ON' ? 1 : 0;
-      this.sendRehauCommand(foundState.installId, foundState.zoneNumber, foundState.channelNumber, { "34": ringLightValue });
+      // Ring light: 0 = unlock/ON, 1 = lock/OFF
+      const ringLightValue = payload === 'ON' ? 0 : 1;
+      this.sendRehauCommand(foundState.installId, foundState.zoneNumber, foundState.channelNumber, { "31": ringLightValue });
       logger.info(`Set zone ${foundState.zoneName} ring light to ${payload}`);
     } catch (error) {
       logger.error(`Failed to handle ring light command for zone ${foundState.zoneName}:`, (error as Error).message);
@@ -1530,9 +1531,9 @@ class ClimateController {
         this.sendRehauCommand(installId, state.zoneNumber, state.channelNumber, { "2": tempF10 });
         logger.info(`Set zone ${state.zoneName} temperature to ${tempCelsius}°C (${tempF10})`);
       } else if (commandType === 'ring_light') {
-        // Ring light command
-        const ringLightValue = payload === 'ON' ? 1 : 0;
-        this.sendRehauCommand(installId, state.zoneNumber, state.channelNumber, { "34": ringLightValue });
+        // Ring light command: 0 = unlock/ON, 1 = lock/OFF
+        const ringLightValue = payload === 'ON' ? 0 : 1;
+        this.sendRehauCommand(installId, state.zoneNumber, state.channelNumber, { "31": ringLightValue });
         logger.info(`Set zone ${state.zoneName} ring light to ${payload}`);
       }
     } catch (error) {

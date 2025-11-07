@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.5] - 2025-11-07
+
+### Fixed
+- **Ring Light Command Fix**
+  - Fixed ring light control to use correct MQTT command key "31" instead of "34"
+  - Corrected logic: 0 = unlock/ON, 1 = lock/OFF (was inverted)
+  - Ring light should now work properly with REHAU system
+
 ## [2.3.4] - 2025-11-07
 
 ### Changed
