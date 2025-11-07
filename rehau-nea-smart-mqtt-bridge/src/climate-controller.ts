@@ -83,6 +83,7 @@ class ClimateController {
                 zoneId: zone.id,
                 zoneName: zone.name,
                 zoneNumber: zone.number,
+                channelNumber: zone.channels[0].controllerNumber ?? undefined,
                 groupName: group.name,
                 installId: installId,
                 installName: install.name,
@@ -676,6 +677,7 @@ class ClimateController {
                 zoneId: zone.id,
                 zoneName: zone.name,
                 zoneNumber: zone.number,
+                channelNumber: zone.channels[0].controllerNumber ?? undefined,
                 groupName: group.name,
                 installId: installId,
                 installName: install.name,
@@ -1577,6 +1579,7 @@ class ClimateController {
     
     const topic = `client/${installId}`;
     this.mqttBridge.publishToRehau(topic, message);
+    logger.info(`Command sent to zone ${zoneNumber}, channel ${channelNumber}:`, data);
     logger.debug(`Sent REHAU command to zone ${zoneNumber}, channel ${channelNumber}:`, data);
     logger.debug(`Full MQTT message: ${JSON.stringify(message)}`);
   }
