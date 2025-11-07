@@ -1,5 +1,5 @@
 name: REHAU NEA SMART 2.0 MQTT Bridge
-version: "2.3.1"
+version: "2.3.2"
 slug: rehau_nea_smart_mqtt
 description: TypeScript-based MQTT bridge for REHAU NEA SMART 2.0 heating systems with typed interfaces, ring light & lock control
 url: https://github.com/manuxio/rehau-nea-smart-2-home-assistant
@@ -38,7 +38,7 @@ schema:
   mqtt_password: password?
   api_port: port
   log_level: list(debug|info|warn|error)
-  zone_reload_interval: "int(30,3600)?"
+  zone_reload_interval: "int(30,86400)?"
   token_refresh_interval: "int(1800,86400)?"
   referentials_reload_interval: "int(3600,604800)?"
   use_group_in_names: bool?
