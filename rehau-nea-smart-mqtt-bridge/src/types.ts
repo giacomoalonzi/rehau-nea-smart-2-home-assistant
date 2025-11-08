@@ -218,7 +218,7 @@ export interface ReferentialsMap {
 
 // REHAU Command Types
 export interface RehauCommandData {
-  [key: string]: number | string;
+  [key: string]: number | string | boolean;
 }
 
 export interface RehauCommand {

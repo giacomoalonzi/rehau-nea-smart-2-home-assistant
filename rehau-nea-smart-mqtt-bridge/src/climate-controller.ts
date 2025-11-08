@@ -1488,7 +1488,7 @@ class ClimateController {
       const locActivationKey = referentials?.['loc_activation'] || '31'; // Fallback to "31" if referentials not loaded
       
       // Lock: 1 = LOCKED, 0 = UNLOCKED
-      const lockValue = payload === 'LOCK' ? 1 : 0;
+      const lockValue = payload === 'LOCK' ? true : false;
       const commandData = { [locActivationKey]: lockValue };
       
       this.sendRehauCommand(foundState.installId, foundState.channelZone, foundState.controllerNumber, commandData);
@@ -1576,6 +1576,32 @@ class ClimateController {
     }
   }
 
+  /**
+   * Convert a REHAU message with numeric keys to textual keys using referentials
+   */
+  private convertMessageToTextualKeys(message: any): any {
+    const referentials = this.mqttBridge.getReferentials();
+    if (!referentials) {
+      return message; // Return as-is if referentials not loaded
+    }
+
+    const converted: any = {};
+    
+    for (const [key, value] of Object.entries(message)) {
+      // Get textual key from referentials
+      const textualKey = referentials[key] || key;
+      
+      // If value is an object, recursively convert it
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        converted[textualKey] = this.convertMessageToTextualKeys(value);
+      } else {
+        converted[textualKey] = value;
+      }
+    }
+    
+    return converted;
+  }
+
   private sendRehauCommand(installId: string, channelZone: number, controllerNumber: number, data: RehauCommandData): void {
     // REQ_TH command format using numeric keys from referentials
     const message = {
@@ -1587,7 +1613,10 @@ class ClimateController {
     
     const topic = `client/${installId}`;
     this.mqttBridge.publishToRehau(topic, message);
-    logger.info(`Command sent to channelZone ${channelZone}, controller ${controllerNumber}:`, message);
+    
+    // Log with textual keys for readability
+    const textualMessage = this.convertMessageToTextualKeys(message);
+    logger.info(`Command sent to channelZone ${channelZone}, controller ${controllerNumber}:`, textualMessage);
     logger.debug(`Sent REHAU command to channelZone ${channelZone}, controller ${controllerNumber}:`, data);
     logger.debug(`Full MQTT message: ${JSON.stringify(message)}`);
   }
