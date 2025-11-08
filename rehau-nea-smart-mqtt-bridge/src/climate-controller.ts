@@ -1087,9 +1087,20 @@ class ClimateController {
     // Target temperature (process AFTER mode to know which setpoint to use)
     // Only publish if zone is not off
     if (state.mode !== 'off') {
-      const setpoint = installationMode === 'heat' 
-        ? rawChannel.setpoint_h_normal 
-        : rawChannel.setpoint_c_normal;
+      // Select correct setpoint based on mode (heat/cool) and preset (comfort/away)
+      let setpoint: number | undefined;
+      
+      if (installationMode === 'heat') {
+        // Heating mode: use normal or reduced setpoint based on preset
+        setpoint = state.preset === 'away' 
+          ? rawChannel.setpoint_h_reduced 
+          : rawChannel.setpoint_h_normal;
+      } else {
+        // Cooling mode: use normal or reduced setpoint based on preset
+        setpoint = state.preset === 'away' 
+          ? rawChannel.setpoint_c_reduced 
+          : rawChannel.setpoint_c_normal;
+      }
       
       if (setpoint !== undefined) {
         const targetTemp = this.convertTemp(setpoint);
