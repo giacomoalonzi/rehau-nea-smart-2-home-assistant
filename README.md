@@ -404,6 +404,76 @@ See [Parser Documentation](rehau-nea-smart-mqtt-bridge/src/parsers/README.md) fo
 
 ---
 
+## 🚀 Future Enhancements
+
+Based on the REHAU NEA SMART protocol analysis, the following features are planned for future releases:
+
+### 🎯 Planned Features
+
+#### 1. **Schedule/Program Support** (High Priority)
+- **Auto Mode Integration**: Support for `AUTO_NORMAL_3` and `AUTO_REDUCED_4` modes
+- **Schedule Display**: Show active schedule/program in Home Assistant
+- **Schedule Override**: Temporary manual override with automatic return to schedule
+- **Implementation Status**: 🔴 Not Started
+- **Complexity**: High (requires understanding REHAU schedule format)
+
+#### 2. **Party Mode** (Medium Priority)
+- **Local Party Mode**: `PARTY_LOCAL_6` - Override for single zone
+- **Global Party Mode**: `PARTY_GLOBAL_7` - Override for entire installation
+- **Duration Control**: Set party mode duration
+- **Auto Return**: Automatic return to normal mode after duration
+- **Implementation Status**: 🔴 Not Started
+- **Complexity**: Medium (mode constants already documented)
+
+#### 3. **Advanced Mode Support** (Medium Priority)
+- **Manual Mode**: `MANUAL_5` - Full manual control
+- **Global Absence**: `GLOBAL_ABSENCE_9` - Entire installation away mode
+- **Global Reduced**: `GLOBAL_REDUCED_10` - Entire installation reduced mode
+- **Holiday Mode**: `STANDBY_HOLIDAY_11` - Vacation/holiday mode with frost protection
+- **Implementation Status**: 🔴 Not Started
+- **Complexity**: Medium
+
+#### 4. **Enhanced Setpoint Management** (Low Priority)
+- **Standby Setpoint Display**: Show `setpoint_h_standby` (frost protection) as read-only
+- **Setpoint History**: Track setpoint changes over time
+- **Setpoint Validation**: Prevent invalid setpoint values
+- **Implementation Status**: 🔴 Not Started
+- **Complexity**: Low
+
+#### 5. **System Mode Detection** (Low Priority)
+- **Operating Mode Display**: Show if system is in `HEATING_ONLY`, `COOLING_ONLY`, or `AUTO` mode
+- **Mode Constraints**: Prevent invalid mode combinations
+- **Mode Recommendations**: Suggest optimal mode based on season/temperature
+- **Implementation Status**: 🔴 Not Started
+- **Complexity**: Low
+
+### 📋 Technical Reference
+
+The add-on now correctly handles:
+- ✅ **Setpoint Selection**: Automatically selects correct setpoint (`setpoint_h_normal`, `setpoint_h_reduced`, `setpoint_c_normal`, `setpoint_c_reduced`) based on mode and preset
+- ✅ **OFF Mode Handling**: Publishes "None" for temperature and preset when zone is off
+- ✅ **Multi-Controller Support**: Correctly routes commands to zones on different controllers
+- ✅ **Mode Constants**: Uses REHAU protocol mode values (0=Comfort, 1=Away, 2=Standby, etc.)
+
+For detailed technical information about REHAU modes and setpoints, see the internal documentation.
+
+### 🤝 Contributing
+
+Interested in implementing these features? Contributions are welcome!
+
+1. Check the [GitHub Issues](https://github.com/manuxio/rehau-nea-smart-2-home-assistant/issues) for related discussions
+2. Review the REHAU protocol documentation (stored in project memory)
+3. Submit a pull request with your implementation
+
+**Priority Order for Implementation:**
+1. Schedule/Program support (most requested)
+2. Party mode (useful for events)
+3. Advanced modes (nice-to-have)
+4. Enhanced setpoint management (polish)
+5. System mode detection (informational)
+
+---
+
 ## 💬 Support
 
 For issues and feature requests, please visit:
