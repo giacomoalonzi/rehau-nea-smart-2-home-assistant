@@ -31,12 +31,14 @@ class ClimateController {
   private installations: Map<string, ClimateState>;
   private installationNames: Map<string, string>; // Map installId -> installName
   private installationData: Map<string, IInstall>; // Map installId -> IInstall data
+  private channelToZoneKey: Map<string, string>; // Map channelId -> zoneKey for fast lookup
 
   constructor(mqttBridge: RehauMQTTBridge, _rehauApi: RehauAuthPersistent) {
     this.mqttBridge = mqttBridge;
     this.installations = new Map<string, ClimateState>();
     this.installationNames = new Map<string, string>();
     this.installationData = new Map<string, IInstall>();
+    this.channelToZoneKey = new Map<string, string>();
     
     // Listen to REHAU messages and HA commands
     this.mqttBridge.onMessage((topicOrCommand, payload?) => {
@@ -133,6 +135,8 @@ class ClimateController {
       // Register zone name and group name for better logging
       if (zone.channels && zone.channels[0]) {
         this.mqttBridge.registerZoneName(zone.channels[0].id, zone.zoneName, zone.groupName);
+        // Map channel ID to zone key for fast lookup
+        this.channelToZoneKey.set(zone.channels[0].id, zoneKey);
       }
       
       // Get initial values from zone data if available
@@ -987,37 +991,17 @@ class ClimateController {
     // - realtime: payload.zones contains zones array
     
     if (payload.type === 'channel_update' && payload.data) {
-      // channel_update: payload.data.data contains the actual channel data
-      const channelUpdatePayload = payload as { type: string; data: { data: any } };
+      // channel_update: payload.data contains channel ID and data
+      const channelUpdatePayload = payload as { type: string; data: { channel: string; data: any } };
+      const channelId = channelUpdatePayload.data.channel; // CORRECT: Get channel ID from data.channel
       const channelData = channelUpdatePayload.data.data;
       
-      if (channelData) {
-        // Find zone by channel_zone number and controller
-        // We need to look up the zone ID from the channel data
-        const channelId = channelData._id || channelData.id;
-        let zoneKey: string | null = null;
-        
-        // Find the state by matching channel ID
-        for (const [key, state] of this.installations.entries()) {
-          if (state.installId === installId) {
-            // Check if this zone's channel matches
-            const installData = this.installationData.get(installId);
-            if (installData && installData.groups) {
-              for (const group of installData.groups) {
-                for (const zone of group.zones) {
-                  if (zone.channels && zone.channels[0] && zone.channels[0].id === channelId) {
-                    zoneKey = key;
-                    break;
-                  }
-                }
-                if (zoneKey) break;
-              }
-            }
-          }
-          if (zoneKey) break;
-        }
+      if (channelData && channelId) {
+        // Fast lookup: Use channel ID to find zone key
+        const zoneKey = this.channelToZoneKey.get(channelId);
         
         if (!zoneKey) {
+          logger.warn(`No zone found for channel ID: ${channelId}`);
           return;
         }
         
@@ -1077,17 +1061,7 @@ class ClimateController {
       this.publishHumidity(zoneKey, rawChannel.humidity);
     }
     
-    // Target temperature
-    const setpoint = rawChannel.setpoint_h_normal || rawChannel.setpoint_c_normal;
-    if (setpoint) {
-      const targetTemp = this.convertTemp(setpoint);
-      if (targetTemp !== null && targetTemp !== state.targetTemperature) {
-        state.targetTemperature = targetTemp;
-        this.publishTargetTemperature(zoneKey, targetTemp);
-      }
-    }
-    
-    // Mode and Preset based on mode_used
+    // Mode and Preset based on mode_used (process BEFORE setpoint)
     if (rawChannel.mode_used !== undefined) {
       if (rawChannel.mode_used === 2 || rawChannel.mode_used === 3) {
         // OFF or STANDBY
@@ -1106,6 +1080,33 @@ class ClimateController {
         state.preset = (rawChannel.mode_used in presetMap) ? presetMap[rawChannel.mode_used] : 'comfort';
         if (state.preset) {
           this.publishPreset(zoneKey, state.preset);
+        }
+      }
+    }
+    
+    // Target temperature (process AFTER mode to know which setpoint to use)
+    // Only publish if zone is not off
+    if (state.mode !== 'off') {
+      // Select correct setpoint based on mode (heat/cool) and preset (comfort/away)
+      let setpoint: number | undefined;
+      
+      if (installationMode === 'heat') {
+        // Heating mode: use normal or reduced setpoint based on preset
+        setpoint = state.preset === 'away' 
+          ? rawChannel.setpoint_h_reduced 
+          : rawChannel.setpoint_h_normal;
+      } else {
+        // Cooling mode: use normal or reduced setpoint based on preset
+        setpoint = state.preset === 'away' 
+          ? rawChannel.setpoint_c_reduced 
+          : rawChannel.setpoint_c_normal;
+      }
+      
+      if (setpoint !== undefined) {
+        const targetTemp = this.convertTemp(setpoint);
+        if (targetTemp !== null && targetTemp !== state.targetTemperature) {
+          state.targetTemperature = targetTemp;
+          this.publishTargetTemperature(zoneKey, targetTemp);
         }
       }
     }

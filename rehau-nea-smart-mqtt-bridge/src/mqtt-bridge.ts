@@ -285,14 +285,22 @@ class RehauMQTTBridge {
             updates.push(`humidity=${channelData.humidity}%`);
           }
           
-          // Setpoints
+          // Setpoints (show both comfort and away/reduced)
           if (channelData.setpoint_h_normal !== undefined && channelData.setpoint_h_normal !== null) {
             const setpointC = Math.round(((channelData.setpoint_h_normal / 10 - 32) / 1.8) * 10) / 10;
-            updates.push(`setpoint_heat=${setpointC}°C`);
+            updates.push(`setpoint_heat_comfort=${setpointC}°C`);
+          }
+          if (channelData.setpoint_h_reduced !== undefined && channelData.setpoint_h_reduced !== null) {
+            const setpointC = Math.round(((channelData.setpoint_h_reduced / 10 - 32) / 1.8) * 10) / 10;
+            updates.push(`setpoint_heat_away=${setpointC}°C`);
           }
           if (channelData.setpoint_c_normal !== undefined && channelData.setpoint_c_normal !== null) {
             const setpointC = Math.round(((channelData.setpoint_c_normal / 10 - 32) / 1.8) * 10) / 10;
-            updates.push(`setpoint_cool=${setpointC}°C`);
+            updates.push(`setpoint_cool_comfort=${setpointC}°C`);
+          }
+          if (channelData.setpoint_c_reduced !== undefined && channelData.setpoint_c_reduced !== null) {
+            const setpointC = Math.round(((channelData.setpoint_c_reduced / 10 - 32) / 1.8) * 10) / 10;
+            updates.push(`setpoint_cool_away=${setpointC}°C`);
           }
           
           // Mode
