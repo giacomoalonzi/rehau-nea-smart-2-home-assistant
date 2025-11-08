@@ -288,9 +288,9 @@ class ClimateController {
         const [channelZone, controller] = key.split('_');
         if (zoneNames.length > 1) {
           hasConflicts = true;
-          logger.warn(`❌ (${channelZone}, ${controller}) → ${zoneNames.join(', ')} [CONFLICT!]`);
+          logger.warn(`❌ (channelZone=${channelZone}, controller=${controller}) → ${zoneNames.join(', ')} [CONFLICT!]`);
         } else {
-          logger.info(`✓  (${channelZone}, ${controller}) → ${zoneNames[0]}`);
+          logger.info(`✓  (channelZone=${channelZone}, controller=${controller}) → ${zoneNames[0]}`);
         }
       });
     
@@ -301,12 +301,12 @@ class ClimateController {
     }
     
     // Reverse lookup table: Zone ID -> Routing
-    logger.info('\n');
+    logger.info('─'.repeat(63));
     logger.info('Reverse Lookup Table (ID → Routing):');
     logger.info('─'.repeat(63));
     
     zones.forEach(zone => {
-      logger.info(`✓  ${zone.zoneName.padEnd(20)} ${zone.zoneId} → (${zone.channelZone}, ${zone.controllerNumber})`);
+      logger.info(`✓  ${zone.zoneName.padEnd(20)} ${zone.zoneId} → (channelZone=${zone.channelZone}, controller=${zone.controllerNumber})`);
     });
     
     logger.info('');
