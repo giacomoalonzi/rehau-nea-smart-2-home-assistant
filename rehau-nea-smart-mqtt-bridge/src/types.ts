@@ -228,6 +228,28 @@ export interface RehauCommand {
   "36"?: number; // zone
 }
 
+// Command Retry Types
+export interface PendingCommand {
+  id: string;
+  installId: string;
+  channelZone: number;
+  controllerNumber: number;
+  data: RehauCommandData;
+  timestamp: number;
+  retries: number;
+  zoneKey: string;
+  commandType: 'mode' | 'preset' | 'temperature' | 'ring_light' | 'lock';
+}
+
+export interface QueuedCommand {
+  installId: string;
+  channelZone: number;
+  controllerNumber: number;
+  data: RehauCommandData;
+  zoneKey: string;
+  commandType: 'mode' | 'preset' | 'temperature' | 'ring_light' | 'lock';
+}
+
 // Logger Types
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 

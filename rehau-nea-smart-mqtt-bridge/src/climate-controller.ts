@@ -7,7 +7,9 @@ import {
   RehauMQTTMessage,
   RehauCommandData,
   LiveEMUData,
-  LiveDIDOData
+  LiveDIDOData,
+  PendingCommand,
+  QueuedCommand
 } from './types';
 import type { IInstall, IChannel, IZone, IGroup } from './parsers';
 
@@ -25,6 +27,9 @@ interface ExtendedZoneInfo {
 
 // Read configuration
 const USE_GROUP_IN_NAMES = process.env.USE_GROUP_IN_NAMES === 'true';
+const COMMAND_RETRY_TIMEOUT = parseInt(process.env.COMMAND_RETRY_TIMEOUT || '30') * 1000; // Default 30 seconds
+const COMMAND_MAX_RETRIES = parseInt(process.env.COMMAND_MAX_RETRIES || '3'); // Default 3 retries
+const COMMAND_CHECK_INTERVAL = 5000; // Check pending commands every 5 seconds
 
 class ClimateController {
   private mqttBridge: RehauMQTTBridge;
@@ -32,6 +37,12 @@ class ClimateController {
   private installationNames: Map<string, string>; // Map installId -> installName
   private installationData: Map<string, IInstall>; // Map installId -> IInstall data
   private channelToZoneKey: Map<string, string>; // Map channelId -> zoneKey for fast lookup
+  
+  // Command queue and retry mechanism
+  private commandQueue: QueuedCommand[] = [];
+  private pendingCommand: PendingCommand | null = null;
+  private commandCheckTimer: NodeJS.Timeout | null = null;
+  private commandIdCounter: number = 0;
 
   constructor(mqttBridge: RehauMQTTBridge, _rehauApi: RehauAuthPersistent) {
     this.mqttBridge = mqttBridge;
@@ -39,6 +50,9 @@ class ClimateController {
     this.installationNames = new Map<string, string>();
     this.installationData = new Map<string, IInstall>();
     this.channelToZoneKey = new Map<string, string>();
+    
+    // Start command retry checker
+    this.startCommandRetryChecker();
     
     // Listen to REHAU messages and HA commands
     this.mqttBridge.onMessage((topicOrCommand, payload?) => {
@@ -1083,6 +1097,9 @@ class ClimateController {
       const channelData = channelUpdatePayload.data.data;
       
       if (channelData && channelId) {
+        // Check if this confirms a pending command
+        this.confirmPendingCommand(channelId);
+        
         // Fast lookup: Use channel ID to find zone key
         const zoneKey = this.channelToZoneKey.get(channelId);
         
@@ -1587,7 +1604,14 @@ class ClimateController {
       const ringLightValue = payload === 'ON' ? 1 : 0;
       const commandData = { [ringFunctionKey]: ringLightValue };
       
-      this.sendRehauCommand(foundState.installId, foundState.channelZone, foundState.controllerNumber, commandData);
+      this.sendRehauCommand(
+        foundState.installId,
+        foundState.channelZone,
+        foundState.controllerNumber,
+        commandData,
+        foundKey,
+        'ring_light'
+      );
       
       logger.info(`Set zone ${foundState.zoneName} ring light to ${payload}`);
       logger.info(`Full command data: ${JSON.stringify(commandData)}`);
@@ -1623,7 +1647,14 @@ class ClimateController {
       const lockValue = payload === 'LOCK' ? true : false;
       const commandData = { [locActivationKey]: lockValue };
       
-      this.sendRehauCommand(foundState.installId, foundState.channelZone, foundState.controllerNumber, commandData);
+      this.sendRehauCommand(
+        foundState.installId,
+        foundState.channelZone,
+        foundState.controllerNumber,
+        commandData,
+        foundKey,
+        'lock'
+      );
       
       logger.info(`Set zone ${foundState.zoneName} lock to ${payload}`);
       logger.info(`Full command data: ${JSON.stringify(commandData)}`);
@@ -1670,11 +1701,25 @@ class ClimateController {
         // Mode command: off => mode_used=2, heat/cool => mode_used=0 (comfort)
         if (payload === 'off') {
           // Set mode_used to 2 (OFF)
-          this.sendRehauCommand(installId, state.channelZone, state.controllerNumber, { "15": 2 });
+          this.sendRehauCommand(
+            installId,
+            state.channelZone,
+            state.controllerNumber,
+            { "15": 2 },
+            zoneKey,
+            'mode'
+          );
           logger.info(`Set zone ${state.zoneName} to OFF`);
         } else if (payload === 'heat' || payload === 'cool') {
           // Set mode_used to 0 (COMFORT) when turning on
-          this.sendRehauCommand(installId, state.channelZone, state.controllerNumber, { "15": 0 });
+          this.sendRehauCommand(
+            installId,
+            state.channelZone,
+            state.controllerNumber,
+            { "15": 0 },
+            zoneKey,
+            'mode'
+          );
           logger.info(`Set zone ${state.zoneName} to ${payload.toUpperCase()} with COMFORT preset`);
         }
         
@@ -1688,7 +1733,14 @@ class ClimateController {
         const modeUsed = payload in presetMap ? presetMap[payload] : undefined;
         
         if (modeUsed !== undefined) {
-          this.sendRehauCommand(installId, state.channelZone, state.controllerNumber, { "15": modeUsed });
+          this.sendRehauCommand(
+            installId,
+            state.channelZone,
+            state.controllerNumber,
+            { "15": modeUsed },
+            zoneKey,
+            'preset'
+          );
           logger.info(`Set zone ${state.zoneName} to preset ${payload} (mode_used=${modeUsed})`);
         }
         
@@ -1728,7 +1780,14 @@ class ClimateController {
         logger.info(`  Target setpoint: ${setpointName} (key=${setpointKey})`);
         logger.info(`  Routing: channelZone=${state.channelZone}, controller=${state.controllerNumber}`);
         
-        this.sendRehauCommand(installId, state.channelZone, state.controllerNumber, { [setpointKey]: tempF10 });
+        this.sendRehauCommand(
+          installId,
+          state.channelZone,
+          state.controllerNumber,
+          { [setpointKey]: tempF10 },
+          zoneKey,
+          'temperature'
+        );
         logger.info(`Set zone ${state.zoneName} ${setpointName} to ${tempCelsius}°C (${tempF10})`);
       } else if (commandType === 'ring_light') {
         // Get referentials to use proper key for ring light
@@ -1739,7 +1798,14 @@ class ClimateController {
         const ringLightValue = payload === 'ON' ? 1 : 0;
         const commandData = { [ringFunctionKey]: ringLightValue };
         
-        this.sendRehauCommand(installId, state.channelZone, state.controllerNumber, commandData);
+        this.sendRehauCommand(
+          installId,
+          state.channelZone,
+          state.controllerNumber,
+          commandData,
+          zoneKey,
+          'ring_light'
+        );
         
         logger.info(`Set zone ${state.zoneName} ring light to ${payload}`);
         logger.info(`Full command data: ${JSON.stringify(commandData)}`);
@@ -1775,7 +1841,176 @@ class ClimateController {
     return converted;
   }
 
-  private sendRehauCommand(installId: string, channelZone: number, controllerNumber: number, data: RehauCommandData): void {
+  /**
+   * Queue a command for execution with retry support
+   */
+  private queueCommand(
+    installId: string,
+    channelZone: number,
+    controllerNumber: number,
+    data: RehauCommandData,
+    zoneKey: string,
+    commandType: 'mode' | 'preset' | 'temperature' | 'ring_light' | 'lock'
+  ): void {
+    const command: QueuedCommand = {
+      installId,
+      channelZone,
+      controllerNumber,
+      data,
+      zoneKey,
+      commandType
+    };
+    
+    this.commandQueue.push(command);
+    logger.debug(`Command queued (${this.commandQueue.length} in queue): ${commandType} for zone ${zoneKey}`);
+    
+    // Process queue if no pending command
+    this.processCommandQueue();
+  }
+
+  /**
+   * Process the next command in the queue
+   */
+  private processCommandQueue(): void {
+    // Don't process if there's already a pending command
+    if (this.pendingCommand) {
+      return;
+    }
+    
+    // Get next command from queue
+    const command = this.commandQueue.shift();
+    if (!command) {
+      return;
+    }
+    
+    // Create pending command
+    this.commandIdCounter++;
+    this.pendingCommand = {
+      id: `cmd_${this.commandIdCounter}_${Date.now()}`,
+      installId: command.installId,
+      channelZone: command.channelZone,
+      controllerNumber: command.controllerNumber,
+      data: command.data,
+      timestamp: Date.now(),
+      retries: 0,
+      zoneKey: command.zoneKey,
+      commandType: command.commandType
+    };
+    
+    // Send the command
+    this.sendRehauCommandImmediate(
+      command.installId,
+      command.channelZone,
+      command.controllerNumber,
+      command.data
+    );
+    
+    // Ring light and lock commands NEVER return confirmations (REHAU design)
+    // Auto-confirm them after a short delay to allow MQTT delivery
+    if (command.commandType === 'ring_light' || command.commandType === 'lock') {
+      logger.info(`📤 Command sent (ID: ${this.pendingCommand.id}) - ${command.commandType} (no confirmation expected)`);
+      
+      // Capture the command ID for the timeout closure
+      const commandId = this.pendingCommand.id;
+      
+      // Auto-confirm after 2 seconds (enough time for MQTT delivery)
+      setTimeout(() => {
+        if (this.pendingCommand && this.pendingCommand.id === commandId) {
+          logger.info(`✅ Command auto-confirmed (ID: ${commandId}) - ${command.commandType}`);
+          this.pendingCommand = null;
+          this.processCommandQueue();
+        }
+      }, 2000);
+    } else {
+      logger.info(`⏱️  Command sent (ID: ${this.pendingCommand.id}), waiting for confirmation...`);
+      logger.debug(`   Timeout: ${COMMAND_RETRY_TIMEOUT}ms, Max retries: ${COMMAND_MAX_RETRIES}`);
+    }
+  }
+
+  /**
+   * Start the command retry checker timer
+   */
+  private startCommandRetryChecker(): void {
+    this.commandCheckTimer = setInterval(() => {
+      this.checkPendingCommand();
+    }, COMMAND_CHECK_INTERVAL);
+    
+    logger.debug(`Command retry checker started (interval: ${COMMAND_CHECK_INTERVAL}ms)`);
+  }
+
+  /**
+   * Check if pending command has timed out and needs retry
+   */
+  private checkPendingCommand(): void {
+    if (!this.pendingCommand) {
+      return;
+    }
+    
+    // Skip retry check for ring_light and lock - they auto-confirm via setTimeout
+    if (this.pendingCommand.commandType === 'ring_light' || this.pendingCommand.commandType === 'lock') {
+      return;
+    }
+    
+    const elapsed = Date.now() - this.pendingCommand.timestamp;
+    
+    if (elapsed >= COMMAND_RETRY_TIMEOUT) {
+      // Command timed out
+      this.pendingCommand.retries++;
+      
+      if (this.pendingCommand.retries >= COMMAND_MAX_RETRIES) {
+        // Max retries reached, give up
+        logger.error(`❌ Command failed after ${COMMAND_MAX_RETRIES} retries (ID: ${this.pendingCommand.id})`);
+        logger.error(`   Zone: ${this.pendingCommand.zoneKey}`);
+        logger.error(`   Type: ${this.pendingCommand.commandType}`);
+        logger.error(`   Data: ${JSON.stringify(this.pendingCommand.data)}`);
+        
+        // Clear pending command and process next
+        this.pendingCommand = null;
+        this.processCommandQueue();
+      } else {
+        // Retry the command
+        logger.warn(`⚠️  Command timeout (ID: ${this.pendingCommand.id}), retrying (${this.pendingCommand.retries}/${COMMAND_MAX_RETRIES})...`);
+        
+        // Update timestamp and resend
+        this.pendingCommand.timestamp = Date.now();
+        this.sendRehauCommandImmediate(
+          this.pendingCommand.installId,
+          this.pendingCommand.channelZone,
+          this.pendingCommand.controllerNumber,
+          this.pendingCommand.data
+        );
+      }
+    }
+  }
+
+  /**
+   * Confirm a pending command (called when we receive matching channel_update)
+   * Simple FIFO logic: any update for the correct zone confirms the pending command
+   */
+  private confirmPendingCommand(channelId: string): void {
+    if (!this.pendingCommand) {
+      return;
+    }
+    
+    // Check if this update is for the zone we're waiting for
+    const zoneKey = this.channelToZoneKey.get(channelId);
+    if (!zoneKey || zoneKey !== this.pendingCommand.zoneKey) {
+      return;
+    }
+    
+    // Command confirmed! (any update for this zone confirms it)
+    logger.info(`✅ Command confirmed (ID: ${this.pendingCommand.id}) after ${Date.now() - this.pendingCommand.timestamp}ms`);
+    logger.debug(`   Retries: ${this.pendingCommand.retries}`);
+    
+    // Clear pending command and process next
+    this.pendingCommand = null;
+    this.processCommandQueue();
+  }
+
+  /**
+   * Send command immediately (internal method, bypasses queue)
+   */
+  private sendRehauCommandImmediate(installId: string, channelZone: number, controllerNumber: number, data: RehauCommandData): void {
     // REQ_TH command format using numeric keys from referentials
     const message = {
       "11": "REQ_TH",  // type
@@ -1792,6 +2027,49 @@ class ClimateController {
     logger.info(`Command sent to channelZone ${channelZone}, controller ${controllerNumber}:`, textualMessage);
     logger.debug(`Sent REHAU command to channelZone ${channelZone}, controller ${controllerNumber}:`, data);
     logger.debug(`Full MQTT message: ${JSON.stringify(message)}`);
+  }
+
+  /**
+   * Queue a command (simplified - no field/value tracking needed)
+   */
+  private sendRehauCommand(
+    installId: string,
+    channelZone: number,
+    controllerNumber: number,
+    data: RehauCommandData,
+    zoneKey?: string,
+    commandType?: 'mode' | 'preset' | 'temperature' | 'ring_light' | 'lock'
+  ): void {
+    // If we don't have zoneKey, try to find it from channelZone and controller
+    let actualZoneKey = zoneKey;
+    if (!actualZoneKey) {
+      // Find zone by channelZone and controllerNumber
+      for (const [key, state] of this.installations.entries()) {
+        if (state.installId === installId && 
+            state.channelZone === channelZone && 
+            state.controllerNumber === controllerNumber) {
+          actualZoneKey = key;
+          break;
+        }
+      }
+    }
+    
+    if (!actualZoneKey) {
+      logger.warn(`Cannot queue command: zone not found for channelZone=${channelZone}, controller=${controllerNumber}`);
+      // Fallback to immediate send
+      this.sendRehauCommandImmediate(installId, channelZone, controllerNumber, data);
+      return;
+    }
+    
+    // Queue the command
+    this.queueCommand(
+      installId,
+      channelZone,
+      controllerNumber,
+      data,
+      actualZoneKey,
+      commandType || 'mode'
+    );
   }
 
   /**
@@ -2061,6 +2339,17 @@ class ClimateController {
       logger.info(`   Topics: ${diCount} DI + ${doCount} DO binary sensors`);
       logger.info(`   Base: homeassistant/binary_sensor/rehau_${installId}_${controllerKey.toLowerCase()}`);
     });
+  }
+
+  /**
+   * Cleanup method to stop timers
+   */
+  cleanup(): void {
+    if (this.commandCheckTimer) {
+      clearInterval(this.commandCheckTimer);
+      this.commandCheckTimer = null;
+      logger.info('Command retry checker stopped');
+    }
   }
 }
 
