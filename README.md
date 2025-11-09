@@ -454,6 +454,51 @@ The add-on now correctly handles:
 - ✅ **OFF Mode Handling**: Publishes "None" for temperature and preset when zone is off
 - ✅ **Multi-Controller Support**: Correctly routes commands to zones on different controllers
 - ✅ **Mode Constants**: Uses REHAU protocol mode values (0=Comfort, 1=Away, 2=Standby, etc.)
+- ✅ **Read/Write Separation**: Correctly implements REHAU's setpoint architecture
+
+#### Understanding REHAU Setpoints
+
+**CRITICAL: Read vs Write Setpoints**
+
+REHAU uses separate fields for reading and writing temperatures:
+
+| Field | Direction | Purpose |
+|-------|-----------|---------|
+| `setpoint_used` | **READ-ONLY** | What temperature the thermostat is actually targeting RIGHT NOW |
+| `setpoint_h_normal` | **WRITE-ONLY** | Configuration for heating comfort temperature |
+| `setpoint_h_reduced` | **WRITE-ONLY** | Configuration for heating away temperature |
+| `setpoint_c_normal` | **WRITE-ONLY** | Configuration for cooling comfort temperature |
+| `setpoint_c_reduced` | **WRITE-ONLY** | Configuration for cooling away temperature |
+
+**Why this separation?**
+
+- **`setpoint_used`** shows the **actual** temperature the controller is targeting RIGHT NOW
+  - Reflects intelligent decisions (programs, optimization, schedules)
+  - May differ from configured setpoints due to active schedules or system optimization
+  - This is what users see in Home Assistant
+
+- **`setpoint_h_normal`, `setpoint_h_reduced`, etc.** are configuration values
+  - Tell the system what temperatures to use in different modes
+  - The controller decides WHEN to use each one based on current mode and schedules
+  - Updated when users change temperature in Home Assistant
+
+**Benefits:**
+1. Controller can make intelligent decisions (programs, optimization)
+2. App displays actual system behavior (via `setpoint_used`)
+3. Users see what's really happening, not just what they configured
+4. Supports complex features like schedules without app needing to know details
+
+**Example:**
+```
+User configures:
+- Heating Comfort: 22°C (setpoint_h_normal)
+- Heating Away: 19°C (setpoint_h_reduced)
+
+Active schedule switches to Away mode at 8 AM:
+- setpoint_used changes to 19°C
+- Home Assistant displays: Target = 19°C (actual behavior)
+- Configuration values remain unchanged
+```
 
 For detailed technical information about REHAU modes and setpoints, see the internal documentation.
 
