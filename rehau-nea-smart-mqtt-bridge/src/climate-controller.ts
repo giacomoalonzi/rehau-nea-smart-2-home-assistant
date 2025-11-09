@@ -1009,16 +1009,7 @@ class ClimateController {
       }
     }
     
-    // Target temperature (already converted to Celsius)
-    if (channel.setpointTemperature.celsius !== null) {
-      const targetTemp = channel.setpointTemperature.celsius;
-      if (targetTemp !== state.targetTemperature) {
-        state.targetTemperature = targetTemp;
-        this.publishTargetTemperature(zoneKey, targetTemp);
-      }
-    }
-    
-    // Mode and Preset based on mode
+    // Mode and Preset based on mode (process BEFORE setpoint)
     // mode: 0=COMFORT, 1=REDUCED, 2=STANDBY, 3=OFF
     if (channel.mode !== null) {
       if (channel.mode === 3 || channel.mode === 2) {
@@ -1026,7 +1017,9 @@ class ClimateController {
         state.mode = 'off';
         state.preset = null;
         this.publishMode(zoneKey, 'off');
-        // Don't publish preset when off
+        // Publish "None" for preset and target_temperature when OFF
+        this.publishPresetNone(zoneKey);
+        this.publishTargetTemperatureNone(zoneKey);
       } else {
         // Zone is on - use system mode and set preset
         state.mode = installationMode || state.mode;
@@ -1039,6 +1032,18 @@ class ClimateController {
         state.preset = (channel.mode in presetMap) ? presetMap[channel.mode] : 'comfort';
         if (state.preset) {
           this.publishPreset(zoneKey, state.preset);
+        }
+      }
+    }
+    
+    // Target temperature (process AFTER mode to know if zone is off)
+    // Only publish if zone is not off
+    if (state.mode !== 'off') {
+      if (channel.setpointTemperature.celsius !== null) {
+        const targetTemp = channel.setpointTemperature.celsius;
+        if (targetTemp !== state.targetTemperature) {
+          state.targetTemperature = targetTemp;
+          this.publishTargetTemperature(zoneKey, targetTemp);
         }
       }
     }
