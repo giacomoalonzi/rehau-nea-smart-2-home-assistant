@@ -1049,10 +1049,10 @@ class ClimateController {
     if (state.mode !== 'off') {
       if (channel.setpointTemperature.celsius !== null) {
         const targetTemp = channel.setpointTemperature.celsius;
-        if (targetTemp !== state.targetTemperature) {
+        // if (targetTemp !== state.targetTemperature) {
           state.targetTemperature = targetTemp;
           this.publishTargetTemperature(zoneKey, targetTemp);
-        }
+        // }
       }
     }
     
@@ -1190,10 +1190,10 @@ class ClimateController {
           ? rawChannel.setpoint_c_reduced 
           : rawChannel.setpoint_c_normal;
       }
-      
+      // console.log('******************* SETPOINT', setpoint);
       if (setpoint !== undefined) {
         const targetTemp = this.convertTemp(setpoint);
-        if (targetTemp !== null && targetTemp !== state.targetTemperature) {
+        if (targetTemp !== null) {
           state.targetTemperature = targetTemp;
           this.publishTargetTemperature(zoneKey, targetTemp);
         }
@@ -1415,7 +1415,7 @@ class ClimateController {
     
     this.mqttBridge.publishToHomeAssistant(
       topic,
-      'none',
+      'None',
       { retain: true }
     );
   }
@@ -1436,7 +1436,7 @@ class ClimateController {
     
     this.mqttBridge.publishToHomeAssistant(
       topic,
-      'none',
+      'None',
       { retain: true }
     );
   }
