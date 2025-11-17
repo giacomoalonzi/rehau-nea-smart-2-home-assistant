@@ -50,4 +50,3 @@ services:
 networks:
   rehau-network:
     driver: bridge
-
