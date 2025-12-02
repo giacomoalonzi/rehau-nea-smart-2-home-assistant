@@ -393,9 +393,6 @@ class RehauAuthPersistent {
       
       // Use condensed format for large installation data
       debugDump('getInstallationData API Response', response.data, true);
-      console.log("************************");
-      console.log(JSON.stringify(response.data));
-      console.log("************************");
       
       // Use V2 parser to extract installation data
       const parser = new InstallationDataParserV2();

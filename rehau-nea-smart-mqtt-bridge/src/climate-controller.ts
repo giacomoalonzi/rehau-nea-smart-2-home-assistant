@@ -1037,7 +1037,7 @@ class ClimateController {
     
     // Count entities
     const climateCount = zones.length + 1; // zones + mode control
-    const sensorCount = zones.length * 2 + 1; // temp + humidity per zone + outside temp
+    const sensorCount = zones.length * 5 + 1; // temp + humidity + demanding + demanding_percent + dewpoint per zone + outside temp
     const totalCount = climateCount + sensorCount;
     
     logger.info(`Installation: ${installName} (${installId})`);
@@ -1121,6 +1121,44 @@ class ClimateController {
       logger.info(`   │  ├─ object_id                            → "${objectIdBase}_humidity"`);
       logger.info(`   │  ├─ availability                         → "online"`);
       logger.info(`   │  └─ state                                → ${zone.state.humidity ?? 'N/A'}%`);
+      
+      // Get demanding values from zone channels
+      let demandingState = 'N/A';
+      let demandingPercent = 'N/A';
+      let dewpoint = 'N/A';
+      
+      // Find the zone in install data to get channel info
+      for (const group of install.groups) {
+        const zoneData = group.zones.find(z => z.number === zone.zoneNumber);
+        if (zoneData && zoneData.channels && zoneData.channels[0]) {
+          const channel = zoneData.channels[0];
+          demandingState = channel.demandState ? 'ON' : 'OFF';
+          demandingPercent = channel.demand !== null ? `${channel.demand}%` : 'N/A';
+          dewpoint = channel.dewpoint !== null ? `${channel.dewpoint.toFixed(1)}°C` : 'N/A';
+          break;
+        }
+      }
+      
+      logger.info(`   │`);
+      logger.info(`   ├─ rehau_${zone.state.zoneId}_demanding/             [binary_sensor]`);
+      logger.info(`   │  ├─ config                               → "${displayName} Demanding"`);
+      logger.info(`   │  ├─ object_id                            → "${objectIdBase}_demanding"`);
+      logger.info(`   │  ├─ availability                         → "online"`);
+      logger.info(`   │  └─ state                                → ${demandingState}`);
+      
+      logger.info(`   │`);
+      logger.info(`   ├─ rehau_${zone.state.zoneId}_demanding_percent/`);
+      logger.info(`   │  ├─ config                               → "${displayName} Demanding Percent"`);
+      logger.info(`   │  ├─ object_id                            → "${objectIdBase}_demanding_percent"`);
+      logger.info(`   │  ├─ availability                         → "online"`);
+      logger.info(`   │  └─ state                                → ${demandingPercent}`);
+      
+      logger.info(`   │`);
+      logger.info(`   ├─ rehau_${zone.state.zoneId}_dewpoint/`);
+      logger.info(`   │  ├─ config                               → "${displayName} Dewpoint"`);
+      logger.info(`   │  ├─ object_id                            → "${objectIdBase}_dewpoint"`);
+      logger.info(`   │  ├─ availability                         → "online"`);
+      logger.info(`   │  └─ state                                → ${dewpoint}`);
       
       if (!isLast) {
         logger.info('   │');
