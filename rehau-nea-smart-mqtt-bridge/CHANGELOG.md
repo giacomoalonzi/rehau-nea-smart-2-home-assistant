@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.7.2] - 2025-12-02
+
+### ✨ New Features
+
+#### Zone Heating Demand Sensors
+Added three new sensors per zone to monitor heating activity in real-time:
+
+- **Demanding** (`binary_sensor`) - Shows if the zone is actively calling for heat (ON/OFF)
+  - Maps to `status_cc_zone.demand_state` from REHAU API
+  - Device class: `heat`
+- **Demanding Percent** (`sensor`) - Shows heating demand intensity as percentage (0-100%)
+  - Maps to `demand` field from REHAU API
+  - Unit: `%`
+  - Icon: `mdi:fire`
+- **Dewpoint** (`sensor`) - Shows dewpoint temperature for condensation monitoring
+  - Maps to `dewpoint` field from REHAU API
+  - Device class: `temperature`
+  - Unit: `°C`
+
+These sensors provide visibility into which rooms are currently heating, matching the LED indicators on physical manifolds (e.g., RZ22, RZ24).
+
+---
+
 ## [2.7.1] - 2025-11-11
 
 ### 🚀 Improvements

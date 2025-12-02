@@ -108,6 +108,8 @@ export interface IChannel {
   // Operating state
   /** Operating mode (0=comfort, 1=reduced, 2=standby, 3=off) */
   mode: number | null;
+  /** Heating demand active state (true if zone is calling for heat) */
+  demandState: boolean;
   /** Heating demand percentage (0-100) */
   demand: number | null;
   
@@ -676,6 +678,7 @@ export class InstallationDataParserV2 {
       openWindow: channel.openWindow === true,
       lowBattery: channel.lowBattery === true,
       mode: typeof channel.mode_permanent === 'number' ? channel.mode_permanent : null,
+      demandState: (channel.status_cc_zone as Record<string, unknown> | undefined)?.demand_state === true,
       demand: typeof channel.demand === 'number' ? channel.demand : null,
       config: {
         heating: channelConfig?.heating === true,

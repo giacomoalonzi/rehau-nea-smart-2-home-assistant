@@ -232,6 +232,19 @@ class ClimateController {
       if (humidity !== null) {
         this.publishHumidity(zoneKey, humidity);
       }
+      
+      // Publish demanding sensors
+      if (zone.channels && zone.channels[0]) {
+        const channel = zone.channels[0];
+        this.publishDemanding(zoneKey, channel.demandState);
+        if (channel.demand !== null) {
+          this.publishDemandingPercent(zoneKey, channel.demand);
+        }
+        if (channel.dewpoint !== null) {
+          this.publishDewpoint(zoneKey, channel.dewpoint);
+        }
+      }
+      
       this.publishMode(zoneKey, mode);
       
       // Handle OFF mode: publish "none" for preset and empty for target_temperature
@@ -508,6 +521,104 @@ class ClimateController {
       { retain: true }
     );
     
+    // Demanding (binary sensor)
+    const demandingConfig = {
+      name: `${displayName} Demanding`,
+      object_id: `${objectIdBase}_demanding`,
+      unique_id: `rehau_${zoneId}_demanding`,
+      device: {
+        identifiers: [`rehau_${installId}`],
+        name: `REHAU ${installName}`,
+        manufacturer: 'REHAU',
+        model: 'NEA SMART 2.0',
+        sw_version: '1.0.0'
+      },
+      state_topic: `homeassistant/binary_sensor/rehau_${zoneId}_demanding/state`,
+      device_class: 'heat',
+      payload_on: 'ON',
+      payload_off: 'OFF',
+      availability_topic: `homeassistant/binary_sensor/rehau_${zoneId}_demanding/availability`,
+      payload_available: 'online',
+      payload_not_available: 'offline'
+    };
+    
+    // Demanding Percent sensor
+    const demandingPercentConfig = {
+      name: `${displayName} Demanding Percent`,
+      object_id: `${objectIdBase}_demanding_percent`,
+      unique_id: `rehau_${zoneId}_demanding_percent`,
+      device: {
+        identifiers: [`rehau_${installId}`],
+        name: `REHAU ${installName}`,
+        manufacturer: 'REHAU',
+        model: 'NEA SMART 2.0',
+        sw_version: '1.0.0'
+      },
+      state_topic: `homeassistant/sensor/rehau_${zoneId}_demanding_percent/state`,
+      unit_of_measurement: '%',
+      value_template: '{{ value }}',
+      icon: 'mdi:fire',
+      availability_topic: `homeassistant/sensor/rehau_${zoneId}_demanding_percent/availability`,
+      payload_available: 'online',
+      payload_not_available: 'offline'
+    };
+    
+    // Dewpoint sensor
+    const dewpointConfig = {
+      name: `${displayName} Dewpoint`,
+      object_id: `${objectIdBase}_dewpoint`,
+      unique_id: `rehau_${zoneId}_dewpoint`,
+      device: {
+        identifiers: [`rehau_${installId}`],
+        name: `REHAU ${installName}`,
+        manufacturer: 'REHAU',
+        model: 'NEA SMART 2.0',
+        sw_version: '1.0.0'
+      },
+      state_topic: `homeassistant/sensor/rehau_${zoneId}_dewpoint/state`,
+      device_class: 'temperature',
+      unit_of_measurement: '°C',
+      value_template: '{{ value }}',
+      availability_topic: `homeassistant/sensor/rehau_${zoneId}_dewpoint/availability`,
+      payload_available: 'online',
+      payload_not_available: 'offline'
+    };
+    
+    // Publish temperature sensor discovery (using zone ID in topic)
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/sensor/rehau_${zoneId}_temperature/config`,
+      tempConfig,
+      { retain: true }
+    );
+    
+    // Publish humidity sensor discovery (using zone ID in topic)
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/sensor/rehau_${zoneId}_humidity/config`,
+      humidityConfig,
+      { retain: true }
+    );
+    
+    // Publish demanding binary sensor discovery
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/binary_sensor/rehau_${zoneId}_demanding/config`,
+      demandingConfig,
+      { retain: true }
+    );
+    
+    // Publish demanding percent sensor discovery
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/sensor/rehau_${zoneId}_demanding_percent/config`,
+      demandingPercentConfig,
+      { retain: true }
+    );
+    
+    // Publish dewpoint sensor discovery
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/sensor/rehau_${zoneId}_dewpoint/config`,
+      dewpointConfig,
+      { retain: true }
+    );
+    
     // Publish availability
     this.mqttBridge.publishToHomeAssistant(
       `homeassistant/sensor/rehau_${zoneId}_temperature/availability`,
@@ -516,6 +627,21 @@ class ClimateController {
     );
     this.mqttBridge.publishToHomeAssistant(
       `homeassistant/sensor/rehau_${zoneId}_humidity/availability`,
+      'online',
+      { retain: true }
+    );
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/binary_sensor/rehau_${zoneId}_demanding/availability`,
+      'online',
+      { retain: true }
+    );
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/sensor/rehau_${zoneId}_demanding_percent/availability`,
+      'online',
+      { retain: true }
+    );
+    this.mqttBridge.publishToHomeAssistant(
+      `homeassistant/sensor/rehau_${zoneId}_dewpoint/availability`,
       'online',
       { retain: true }
     );
@@ -1031,6 +1157,19 @@ class ClimateController {
       }
     }
     
+    // Demanding state (binary)
+    this.publishDemanding(zoneKey, channel.demandState);
+    
+    // Demanding percent
+    if (channel.demand !== null) {
+      this.publishDemandingPercent(zoneKey, channel.demand);
+    }
+    
+    // Dewpoint
+    if (channel.dewpoint !== null) {
+      this.publishDewpoint(zoneKey, channel.dewpoint);
+    }
+    
     // Mode and Preset based on mode (process BEFORE setpoint)
     // mode: 0=COMFORT, 1=REDUCED, 2=STANDBY, 3=OFF
     if (channel.mode !== null) {
@@ -1391,6 +1530,70 @@ class ClimateController {
     this.mqttBridge.publishToHomeAssistant(
       topic2,
       humidity.toString(),
+      { retain: true }
+    );
+  }
+
+  private publishDemanding(zoneKey: string, demanding: boolean): void {
+    const state = this.installations.get(zoneKey);
+    if (!state) return;
+    
+    const groupName = this.getGroupNameForZone(state.installId, state.zoneNumber);
+    const topic = `homeassistant/binary_sensor/rehau_${state.zoneId}_demanding/state`;
+    const value = demanding ? 'ON' : 'OFF';
+    
+    logger.info(`📤 MQTT Publish:`);
+    logger.info(`   Topic: ${topic}`);
+    logger.info(`   Group: ${groupName}`);
+    logger.info(`   Zone: ${state.zoneName}`);
+    logger.info(`   Entity: demanding`);
+    logger.info(`   Value: ${value}`);
+    
+    this.mqttBridge.publishToHomeAssistant(
+      topic,
+      value,
+      { retain: true }
+    );
+  }
+
+  private publishDemandingPercent(zoneKey: string, percent: number): void {
+    const state = this.installations.get(zoneKey);
+    if (!state) return;
+    
+    const groupName = this.getGroupNameForZone(state.installId, state.zoneNumber);
+    const topic = `homeassistant/sensor/rehau_${state.zoneId}_demanding_percent/state`;
+    
+    logger.info(`📤 MQTT Publish:`);
+    logger.info(`   Topic: ${topic}`);
+    logger.info(`   Group: ${groupName}`);
+    logger.info(`   Zone: ${state.zoneName}`);
+    logger.info(`   Entity: demanding_percent`);
+    logger.info(`   Value: ${percent}%`);
+    
+    this.mqttBridge.publishToHomeAssistant(
+      topic,
+      percent.toString(),
+      { retain: true }
+    );
+  }
+
+  private publishDewpoint(zoneKey: string, dewpoint: number): void {
+    const state = this.installations.get(zoneKey);
+    if (!state) return;
+    
+    const groupName = this.getGroupNameForZone(state.installId, state.zoneNumber);
+    const topic = `homeassistant/sensor/rehau_${state.zoneId}_dewpoint/state`;
+    
+    logger.info(`📤 MQTT Publish:`);
+    logger.info(`   Topic: ${topic}`);
+    logger.info(`   Group: ${groupName}`);
+    logger.info(`   Zone: ${state.zoneName}`);
+    logger.info(`   Entity: dewpoint`);
+    logger.info(`   Value: ${dewpoint}°C`);
+    
+    this.mqttBridge.publishToHomeAssistant(
+      topic,
+      dewpoint.toString(),
       { retain: true }
     );
   }
