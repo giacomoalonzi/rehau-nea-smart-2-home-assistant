@@ -198,6 +198,9 @@ use_group_in_names: false               # Include group in display names (defaul
 |-----------|-----------|------------|
 | Living Room Temperature | `sensor.rehau_ground_floor_living_room_temperature` | `homeassistant/sensor/rehau_6595d1d5cceecee9ce9772e1_temperature/state` |
 | Living Room Humidity | `sensor.rehau_ground_floor_living_room_humidity` | `homeassistant/sensor/rehau_6595d1d5cceecee9ce9772e1_humidity/state` |
+| Living Room Demanding | `binary_sensor.rehau_ground_floor_living_room_demanding` | `homeassistant/binary_sensor/rehau_6595d1d5cceecee9ce9772e1_demanding/state` |
+| Living Room Demanding Percent | `sensor.rehau_ground_floor_living_room_demanding_percent` | `homeassistant/sensor/rehau_6595d1d5cceecee9ce9772e1_demanding_percent/state` |
+| Living Room Dewpoint | `sensor.rehau_ground_floor_living_room_dewpoint` | `homeassistant/sensor/rehau_6595d1d5cceecee9ce9772e1_dewpoint/state` |
 
 ### Control Entities
 
@@ -219,7 +222,8 @@ lock.rehau_{installation}_{group}_{zone}_lock
 - `{installation}` = Sanitized installation name (lowercase, underscores)
 - `{group}` = Sanitized group name (lowercase, underscores)
 - `{zone}` = Sanitized zone name (lowercase, underscores)
-- `{type}` = `temperature` or `humidity`
+- `{type}` = `temperature`, `humidity`, `demanding_percent`, or `dewpoint`
+- Binary sensor entities (`demanding`) follow the same naming scheme but use the `binary_sensor` domain.
 
 ### MQTT Topic Structure (v2.3.3+)
 
@@ -247,6 +251,21 @@ homeassistant/sensor/rehau_{zoneId}_humidity/
   ├─ state
   └─ availability
 
+homeassistant/binary_sensor/rehau_{zoneId}_demanding/
+  ├─ config
+  ├─ state
+  └─ availability
+
+homeassistant/sensor/rehau_{zoneId}_demanding_percent/
+  ├─ config
+  ├─ state
+  └─ availability
+
+homeassistant/sensor/rehau_{zoneId}_dewpoint/
+  ├─ config
+  ├─ state
+  └─ availability
+
 # Ring light
 homeassistant/light/rehau_{zoneId}_ring_light/
   ├─ config
@@ -261,6 +280,8 @@ homeassistant/lock/rehau_{zoneId}_lock/
 ```
 
 **Key Change:** Topics now use `{zoneId}` (MongoDB ObjectId) instead of `{installId}_zone_{zoneNumber}`
+
+> ℹ️ **Demanding sensor confidence**: The `demanding`, `demanding_percent`, and `dewpoint` entities are sourced from REHAU's `status_cc_zone.demand_state`, `demand`, and `dewpoint` fields. Early testing indicates `demanding` aligns with the manifold LEDs, but real-world confirmation is still in progress.
 
 ---
 
