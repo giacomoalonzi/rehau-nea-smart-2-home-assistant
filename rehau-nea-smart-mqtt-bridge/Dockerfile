@@ -1,7 +1,15 @@
-FROM node:20-alpine
+# Support both Home Assistant addon (BUILD_FROM) and standalone (node:20-alpine) builds
+ARG BUILD_FROM=node:20-alpine
+FROM $BUILD_FROM
 
-# Install wget for healthcheck
-RUN apk add --no-cache wget
+# Install Node.js and npm if not already present (needed for HA base images)
+# This check works for both HA addon builds (BUILD_FROM) and standalone (node:20-alpine)
+RUN if ! command -v node > /dev/null 2>&1; then \
+      apk add --no-cache nodejs npm; \
+    fi
+
+# Install wget for healthcheck and jq for JSON parsing (needed for HA addon config)
+RUN apk add --no-cache wget jq
 
 # Set working directory
 WORKDIR /app
