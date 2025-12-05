@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.7.5] - 2025-12-05
+
+### 🐛 Bug Fixes & Improvements
+
+#### Enhanced Startup Debugging
+- **Comprehensive Debug Logging**: Added extensive debug logging throughout the startup script (`run.sh`) to help diagnose configuration and startup issues
+- **Configuration Validation**: Improved validation messages for required environment variables with clear error messages for different deployment scenarios
+- **Environment Snapshot**: Added detailed environment variable logging (with redacted secrets) to help troubleshoot configuration issues
+- **Runtime Checks**: Added verification steps for Node.js binary, `/app` directory, and `dist/index.js` file existence
+- **Better Error Messages**: Enhanced error messages to distinguish between Home Assistant addon, HA Core, and standalone deployments
+
+#### Configuration Loading
+- **Improved JSON Parsing**: Enhanced JSON parsing with better error handling and fallback defaults
+- **Debug Output**: Added debug output for each configuration value loaded from `options.json`
+- **Default Values**: Clearer application of default values for optional configuration parameters
+
+#### Benefits
+- **Easier Troubleshooting**: Users can now see exactly where startup failures occur
+- **Better Support**: Debug logs make it easier to diagnose issues in support requests
+- **Deployment Clarity**: Clear distinction between different deployment modes (addon vs Core vs standalone)
+
+---
+
 ## [2.7.3] - 2025-12-02
 
 ### 🔄 Unified Usage for Core and Supervised Users

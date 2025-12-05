@@ -1,123 +1,232 @@
 #!/bin/sh
 
-# Load configuration from Home Assistant addon options.json if it exists
-# This allows the addon to work both as HA addon and standalone
-if [ -f "/data/options.json" ]; then
-  echo "Loading configuration from /data/options.json (Home Assistant addon mode)..."
-  
-  # Try to load bashio (Home Assistant addon helper) if available
-  BASHIO_AVAILABLE=false
-  if [ -f "/usr/lib/bashio/bashio.sh" ]; then
-    # Source bashio to make functions available
-    if . /usr/lib/bashio/bashio.sh 2>/dev/null; then
-      # Test if bashio::config function works by trying a safe call
-      # This will succeed if bashio is loaded, even if the key doesn't exist
-      if (bashio::config 'rehau_email' >/dev/null 2>&1 || \
-          bashio::config.has_value 'rehau_email' >/dev/null 2>&1); then
-        BASHIO_AVAILABLE=true
-        echo "Using bashio to load configuration..."
-      fi
-    fi
-  fi
-  
-  # Use bashio if available, otherwise fall back to jq
-  if [ "$BASHIO_AVAILABLE" = "true" ]; then
-    export REHAU_EMAIL=$(bashio::config 'rehau_email')
-    export REHAU_PASSWORD=$(bashio::config 'rehau_password')
-    export MQTT_HOST=$(bashio::config 'mqtt_host')
-    
-    # Get optional values with defaults
-    MQTT_PORT_VAL=$(bashio::config 'mqtt_port' || echo '')
-    export MQTT_PORT=${MQTT_PORT_VAL:-1883}
-    
-    MQTT_USER_VAL=$(bashio::config 'mqtt_user' || echo '')
-    export MQTT_USER=${MQTT_USER_VAL:-}
-    
-    MQTT_PASSWORD_VAL=$(bashio::config 'mqtt_password' || echo '')
-    export MQTT_PASSWORD=${MQTT_PASSWORD_VAL:-}
-    
-    API_PORT_VAL=$(bashio::config 'api_port' || echo '')
-    export API_PORT=${API_PORT_VAL:-3000}
-    
-    LOG_LEVEL_VAL=$(bashio::config 'log_level' || echo '')
-    export LOG_LEVEL=${LOG_LEVEL_VAL:-info}
-    
-    ZONE_RELOAD_VAL=$(bashio::config 'zone_reload_interval' || echo '')
-    export ZONE_RELOAD_INTERVAL=${ZONE_RELOAD_VAL:-300}
-    
-    TOKEN_REFRESH_VAL=$(bashio::config 'token_refresh_interval' || echo '')
-    export TOKEN_REFRESH_INTERVAL=${TOKEN_REFRESH_VAL:-21600}
-    
-    REFERENTIALS_RELOAD_VAL=$(bashio::config 'referentials_reload_interval' || echo '')
-    export REFERENTIALS_RELOAD_INTERVAL=${REFERENTIALS_RELOAD_VAL:-86400}
-    
-    USE_GROUP_VAL=$(bashio::config 'use_group_in_names' || echo '')
-    export USE_GROUP_IN_NAMES=${USE_GROUP_VAL:-false}
-  # Fallback to jq if bashio is not available
-  elif command -v jq > /dev/null 2>&1; then
-    echo "Using jq to load configuration..."
-    export REHAU_EMAIL=$(jq -r '.rehau_email // empty' /data/options.json)
-    export REHAU_PASSWORD=$(jq -r '.rehau_password // empty' /data/options.json)
-    export MQTT_HOST=$(jq -r '.mqtt_host // empty' /data/options.json)
-    export MQTT_PORT=$(jq -r '.mqtt_port // 1883' /data/options.json)
-    export MQTT_USER=$(jq -r '.mqtt_user // empty' /data/options.json)
-    export MQTT_PASSWORD=$(jq -r '.mqtt_password // empty' /data/options.json)
-    export API_PORT=$(jq -r '.api_port // 3000' /data/options.json)
-    export LOG_LEVEL=$(jq -r '.log_level // "info"' /data/options.json)
-    export ZONE_RELOAD_INTERVAL=$(jq -r '.zone_reload_interval // 300' /data/options.json)
-    export TOKEN_REFRESH_INTERVAL=$(jq -r '.token_refresh_interval // 21600' /data/options.json)
-    export REFERENTIALS_RELOAD_INTERVAL=$(jq -r '.referentials_reload_interval // 86400' /data/options.json)
-    export USE_GROUP_IN_NAMES=$(jq -r '.use_group_in_names // false' /data/options.json)
+echo "[DEBUG] ==== REHAU NEA MQTT Bridge entrypoint starting ===="
+echo "[DEBUG] Shell: $(ps -p $$ -o comm= 2>/dev/null || echo 'unknown')"
+echo "[DEBUG] UID: $(id 2>/dev/null || echo 'id not available')"
+echo "[DEBUG] PWD at start: $(pwd)"
+
+OPTIONS_FILE="/data/options.json"
+echo "[DEBUG] OPTIONS_FILE set to: $OPTIONS_FILE"
+
+if [ -f "$OPTIONS_FILE" ]; then
+  echo "[DEBUG] Detected $OPTIONS_FILE - assuming HA add-on / container with JSON config"
+
+  echo "[DEBUG] Checking for jq..."
+  if command -v jq >/dev/null 2>&1; then
+    echo "[DEBUG] jq found at: $(command -v jq)"
   else
-    echo "ERROR: Neither bashio nor jq is available to parse /data/options.json"
-    echo "Please ensure bashio is available (for HA addon) or jq is installed (for standalone)"
+    echo "[ERROR] /data/options.json exists but 'jq' is NOT installed or not in PATH."
+    echo "[ERROR] PATH is: $PATH"
+    echo "[ERROR] Install jq in the image or remove /data/options.json and use env vars instead."
     exit 1
   fi
-  
-  echo "Configuration loaded from options.json"
+
+  echo "[DEBUG] Reading configuration from JSON..."
+
+  # REHAU_EMAIL
+  echo "[DEBUG] Reading 'rehau_email'..."
+  REHAU_EMAIL="$(jq -r '.rehau_email // empty' "$OPTIONS_FILE" 2>/tmp/jq_rehau_email.err || echo "")"
+  JQ_STATUS_REHAU_EMAIL=$?
+  echo "[DEBUG] jq status for rehau_email: $JQ_STATUS_REHAU_EMAIL"
+  if [ -s /tmp/jq_rehau_email.err ]; then
+    echo "[DEBUG] jq stderr for rehau_email:"
+    cat /tmp/jq_rehau_email.err
+  fi
+  echo "[DEBUG] REHAU_EMAIL length: ${#REHAU_EMAIL}"
+
+  # REHAU_PASSWORD
+  echo "[DEBUG] Reading 'rehau_password'..."
+  REHAU_PASSWORD="$(jq -r '.rehau_password // empty' "$OPTIONS_FILE" 2>/tmp/jq_rehau_password.err || echo "")"
+  JQ_STATUS_REHAU_PASSWORD=$?
+  echo "[DEBUG] jq status for rehau_password: $JQ_STATUS_REHAU_PASSWORD"
+  if [ -s /tmp/jq_rehau_password.err ]; then
+    echo "[DEBUG] jq stderr for rehau_password:"
+    cat /tmp/jq_rehau_password.err
+  fi
+  echo "[DEBUG] REHAU_PASSWORD length: ${#REHAU_PASSWORD} (not printing actual value for safety)"
+
+  # MQTT_HOST
+  echo "[DEBUG] Reading 'mqtt_host'..."
+  MQTT_HOST="$(jq -r '.mqtt_host // empty' "$OPTIONS_FILE" 2>/tmp/jq_mqtt_host.err || echo "")"
+  JQ_STATUS_MQTT_HOST=$?
+  echo "[DEBUG] jq status for mqtt_host: $JQ_STATUS_MQTT_HOST"
+  if [ -s /tmp/jq_mqtt_host.err ]; then
+    echo "[DEBUG] jq stderr for mqtt_host:"
+    cat /tmp/jq_mqtt_host.err
+  fi
+  echo "[DEBUG] MQTT_HOST='$MQTT_HOST'"
+
+  # Optional values with defaults from JSON
+  echo "[DEBUG] Reading optional values with defaults..."
+
+  MQTT_PORT="$(jq -r '.mqtt_port // 1883' "$OPTIONS_FILE" 2>/tmp/jq_mqtt_port.err || echo "1883")"
+  echo "[DEBUG] MQTT_PORT(from JSON or default)= '$MQTT_PORT'"
+
+  MQTT_USER="$(jq -r '.mqtt_user // empty' "$OPTIONS_FILE" 2>/tmp/jq_mqtt_user.err || echo "")"
+  echo "[DEBUG] MQTT_USER='$MQTT_USER'"
+
+  MQTT_PASSWORD="$(jq -r '.mqtt_password // empty' "$OPTIONS_FILE" 2>/tmp/jq_mqtt_password.err || echo "")"
+  echo "[DEBUG] MQTT_PASSWORD length: ${#MQTT_PASSWORD} (not printing actual value)"
+
+  API_PORT="$(jq -r '.api_port // 3000' "$OPTIONS_FILE" 2>/tmp/jq_api_port.err || echo "3000")"
+  echo "[DEBUG] API_PORT='$API_PORT'"
+
+  LOG_LEVEL="$(jq -r '.log_level // "info"' "$OPTIONS_FILE" 2>/tmp/jq_log_level.err || echo "info")"
+  echo "[DEBUG] LOG_LEVEL='$LOG_LEVEL'"
+
+  ZONE_RELOAD_INTERVAL="$(jq -r '.zone_reload_interval // 300' "$OPTIONS_FILE" 2>/tmp/jq_zone_reload.err || echo "300")"
+  echo "[DEBUG] ZONE_RELOAD_INTERVAL='$ZONE_RELOAD_INTERVAL'"
+
+  TOKEN_REFRESH_INTERVAL="$(jq -r '.token_refresh_interval // 21600' "$OPTIONS_FILE" 2>/tmp/jq_token_refresh.err || echo "21600")"
+  echo "[DEBUG] TOKEN_REFRESH_INTERVAL='$TOKEN_REFRESH_INTERVAL'"
+
+  REFERENTIALS_RELOAD_INTERVAL="$(jq -r '.referentials_reload_interval // 86400' "$OPTIONS_FILE" 2>/tmp/jq_ref_reload.err || echo "86400")"
+  echo "[DEBUG] REFERENTIALS_RELOAD_INTERVAL='$REFERENTIALS_RELOAD_INTERVAL'"
+
+  USE_GROUP_IN_NAMES="$(jq -r '.use_group_in_names // false' "$OPTIONS_FILE" 2>/tmp/jq_use_group.err || echo "false")"
+  echo "[DEBUG] USE_GROUP_IN_NAMES='$USE_GROUP_IN_NAMES'"
+
+  echo "[DEBUG] Exporting variables from JSON..."
+  export \
+    REHAU_EMAIL \
+    REHAU_PASSWORD \
+    MQTT_HOST \
+    MQTT_PORT \
+    MQTT_USER \
+    MQTT_PASSWORD \
+    API_PORT \
+    LOG_LEVEL \
+    ZONE_RELOAD_INTERVAL \
+    TOKEN_REFRESH_INTERVAL \
+    REFERENTIALS_RELOAD_INTERVAL \
+    USE_GROUP_IN_NAMES
+
+  echo "[DEBUG] Configuration exported from options.json"
+
 else
-  echo "Running in standalone mode (using environment variables)..."
+  echo "[DEBUG] $OPTIONS_FILE does NOT exist."
+  echo "[DEBUG] Running in standalone / HA Core / plain Linux mode (using environment variables only)..."
 fi
 
-# Validate required environment variables
+echo "[DEBUG] Current environment snapshot (redacted secrets):"
+echo "  REHAU_EMAIL='${REHAU_EMAIL:-<unset>}'"
+echo "  REHAU_PASSWORD length='${REHAU_PASSWORD:+${#REHAU_PASSWORD}}'"
+echo "  MQTT_HOST='${MQTT_HOST:-<unset>}'"
+echo "  MQTT_PORT='${MQTT_PORT:-<unset>}'"
+echo "  MQTT_USER='${MQTT_USER:-<unset>}'"
+echo "  MQTT_PASSWORD length='${MQTT_PASSWORD:+${#MQTT_PASSWORD}}'"
+echo "  API_PORT='${API_PORT:-<unset>}'"
+echo "  LOG_LEVEL='${LOG_LEVEL:-<unset>}'"
+echo "  ZONE_RELOAD_INTERVAL='${ZONE_RELOAD_INTERVAL:-<unset>}'"
+echo "  TOKEN_REFRESH_INTERVAL='${TOKEN_REFRESH_INTERVAL:-<unset>}'"
+echo "  REFERENTIALS_RELOAD_INTERVAL='${REFERENTIALS_RELOAD_INTERVAL:-<unset>}'"
+echo "  USE_GROUP_IN_NAMES='${USE_GROUP_IN_NAMES:-<unset>}'"
+
+# ---- Validation of required variables ----
+echo "[DEBUG] Validating required environment variables..."
+
 if [ -z "$REHAU_EMAIL" ]; then
-  echo "ERROR: REHAU_EMAIL environment variable is required"
-  echo "For Home Assistant addon: ensure rehau_email is set in addon configuration"
-  echo "For standalone: ensure REHAU_EMAIL environment variable is set"
+  echo "[ERROR] REHAU_EMAIL environment variable is required"
+  echo "[ERROR] For Home Assistant addon: ensure 'rehau_email' is set in addon configuration"
+  echo "[ERROR] For standalone / HA Core / plain Linux: ensure REHAU_EMAIL environment variable is set"
   exit 1
 fi
 
 if [ -z "$REHAU_PASSWORD" ]; then
-  echo "ERROR: REHAU_PASSWORD environment variable is required"
-  echo "For Home Assistant addon: ensure rehau_password is set in addon configuration"
-  echo "For standalone: ensure REHAU_PASSWORD environment variable is set"
+  echo "[ERROR] REHAU_PASSWORD environment variable is required"
+  echo "[ERROR] For Home Assistant addon: ensure 'rehau_password' is set in addon configuration"
+  echo "[ERROR] For standalone / HA Core / plain Linux: ensure REHAU_PASSWORD environment variable is set"
   exit 1
 fi
 
 if [ -z "$MQTT_HOST" ]; then
-  echo "ERROR: MQTT_HOST environment variable is required"
-  echo "For Home Assistant addon: ensure mqtt_host is set in addon configuration"
-  echo "For standalone: ensure MQTT_HOST environment variable is set"
+echo "[ERROR] MQTT_HOST environment variable is required"
+  echo "[ERROR] For Home Assistant addon: ensure 'mqtt_host' is set in addon configuration"
+  echo "[ERROR] For standalone / HA Core / plain Linux: ensure MQTT_HOST environment variable is set"
   exit 1
 fi
 
-# Set defaults for optional variables (only if not already set)
-export MQTT_PORT=${MQTT_PORT:-1883}
-export API_PORT=${API_PORT:-3000}
-export LOG_LEVEL=${LOG_LEVEL:-info}
-export ZONE_RELOAD_INTERVAL=${ZONE_RELOAD_INTERVAL:-300}
-export TOKEN_REFRESH_INTERVAL=${TOKEN_REFRESH_INTERVAL:-21600}
-export REFERENTIALS_RELOAD_INTERVAL=${REFERENTIALS_RELOAD_INTERVAL:-86400}
-export USE_GROUP_IN_NAMES=${USE_GROUP_IN_NAMES:-false}
+echo "[DEBUG] Required variables are present."
 
-echo "Starting REHAU NEA SMART 2.0 MQTT Bridge (TypeScript)..."
-echo "MQTT Host: ${MQTT_HOST}:${MQTT_PORT}"
-echo "API Port: ${API_PORT}"
-echo "Zone Reload Interval: ${ZONE_RELOAD_INTERVAL}s"
-echo "Token Refresh Interval: ${TOKEN_REFRESH_INTERVAL}s"
-echo "Referentials Reload Interval: ${REFERENTIALS_RELOAD_INTERVAL}s"
-echo "Use Group in Names: ${USE_GROUP_IN_NAMES}"
+# ---- Defaults for optional values if still not set ----
+echo "[DEBUG] Applying defaults for optional variables if needed..."
 
-# Start the compiled JavaScript application
-cd /app
+: "${MQTT_PORT:=1883}"
+: "${API_PORT:=3000}"
+: "${LOG_LEVEL:=info}"
+: "${ZONE_RELOAD_INTERVAL:=300}"
+: "${TOKEN_REFRESH_INTERVAL:=21600}"
+: "${REFERENTIALS_RELOAD_INTERVAL:=86400}"
+: "${USE_GROUP_IN_NAMES:=false}"
+
+echo "[DEBUG] After defaults:"
+echo "  MQTT_PORT='$MQTT_PORT'"
+echo "  API_PORT='$API_PORT'"
+echo "  LOG_LEVEL='$LOG_LEVEL'"
+echo "  ZONE_RELOAD_INTERVAL='$ZONE_RELOAD_INTERVAL'"
+echo "  TOKEN_REFRESH_INTERVAL='$TOKEN_REFRESH_INTERVAL'"
+echo "  REFERENTIALS_RELOAD_INTERVAL='$REFERENTIALS_RELOAD_INTERVAL'"
+echo "  USE_GROUP_IN_NAMES='$USE_GROUP_IN_NAMES'"
+
+export \
+  MQTT_PORT \
+  API_PORT \
+  LOG_LEVEL \
+  ZONE_RELOAD_INTERVAL \
+  TOKEN_REFRESH_INTERVAL \
+  REFERENTIALS_RELOAD_INTERVAL \
+  USE_GROUP_IN_NAMES
+
+# ---- Check runtime environment (node, /app, dist/index.js) ----
+echo "[DEBUG] Checking for node in PATH..."
+if command -v node >/dev/null 2>&1; then
+  echo "[DEBUG] node found at: $(command -v node)"
+else
+  echo "[ERROR] 'node' binary not found in PATH: $PATH"
+  exit 1
+fi
+
+echo "[DEBUG] Verifying /app directory..."
+if [ -d "/app" ]; then
+  echo "[DEBUG] /app exists."
+else
+  echo "[ERROR] /app directory does NOT exist. Current PWD: $(pwd)"
+  echo "[DEBUG] Listing root directory:"
+  ls -al /
+  exit 1
+fi
+
+echo "[DEBUG] Changing directory to /app..."
+cd /app || {
+  echo "[ERROR] Failed to cd /app"
+  exit 1
+}
+
+echo "[DEBUG] PWD after cd: $(pwd)"
+
+echo "[DEBUG] Checking for dist/index.js..."
+if [ -f "dist/index.js" ]; then
+  echo "[DEBUG] Found dist/index.js"
+else
+  echo "[ERROR] dist/index.js not found in /app."
+  echo "[DEBUG] Listing /app contents:"
+  ls -al
+  if [ -d "dist" ]; then    
+    echo "[DEBUG] Listing /app/dist contents:"
+    ls -al dist
+  fi
+  exit 1
+fi
+
+# ---- Final summary before exec ----
+echo "[INFO] Starting REHAU NEA SMART 2.0 MQTT Bridge (TypeScript)..."
+echo "[INFO] MQTT Host: ${MQTT_HOST}:${MQTT_PORT}"
+echo "[INFO] API Port: ${API_PORT}"
+echo "[INFO] Zone Reload Interval: ${ZONE_RELOAD_INTERVAL}s"
+echo "[INFO] Token Refresh Interval: ${TOKEN_REFRESH_INTERVAL}s"
+echo "[INFO] Referentials Reload Interval: ${REFERENTIALS_RELOAD_INTERVAL}s"
+echo "[INFO] Use Group in Names: ${USE_GROUP_IN_NAMES}"
+
+echo "[DEBUG] Executing: node dist/index.js"
 exec node dist/index.js
+echo "[DEBUG] If you see this line, exec failed for some reason."
