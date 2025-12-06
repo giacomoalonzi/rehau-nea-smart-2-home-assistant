@@ -12,6 +12,7 @@ import {
   QueuedCommand
 } from './types';
 import type { IInstall, IChannel, IZone, IGroup } from './parsers';
+import packageJson from '../package.json';
 
 interface ExtendedZoneInfo {
   zoneId: string;
@@ -30,6 +31,9 @@ const USE_GROUP_IN_NAMES = process.env.USE_GROUP_IN_NAMES === 'true';
 const COMMAND_RETRY_TIMEOUT = parseInt(process.env.COMMAND_RETRY_TIMEOUT || '30') * 1000; // Default 30 seconds
 const COMMAND_MAX_RETRIES = parseInt(process.env.COMMAND_MAX_RETRIES || '3'); // Default 3 retries
 const COMMAND_CHECK_INTERVAL = 5000; // Check pending commands every 5 seconds
+
+// Get version from package.json (single source of truth)
+const SW_VERSION = packageJson.version;
 
 class ClimateController {
   private mqttBridge: RehauMQTTBridge;
@@ -387,7 +391,7 @@ class ClimateController {
         name: `REHAU ${zone.installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       
       // Temperature
@@ -475,7 +479,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/sensor/rehau_${zoneId}_temperature/state`,
       device_class: 'temperature',
@@ -496,7 +500,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/sensor/rehau_${zoneId}_humidity/state`,
       device_class: 'humidity',
@@ -531,7 +535,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/binary_sensor/rehau_${zoneId}_demanding/state`,
       device_class: 'heat',
@@ -552,7 +556,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/sensor/rehau_${zoneId}_demanding_percent/state`,
       unit_of_measurement: '%',
@@ -573,7 +577,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/sensor/rehau_${zoneId}_dewpoint/state`,
       device_class: 'temperature',
@@ -677,7 +681,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/lock/rehau_${zoneId}_lock/state`,
       command_topic: `homeassistant/lock/rehau_${zoneId}_lock/command`,
@@ -701,7 +705,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/light/rehau_${zoneId}_ring_light/state`,
       command_topic: `homeassistant/light/rehau_${zoneId}_ring_light/command`,
@@ -778,7 +782,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       state_topic: `homeassistant/sensor/rehau_${installId}_outside_temp/state`,
       device_class: 'temperature',
@@ -825,7 +829,7 @@ class ClimateController {
         name: `REHAU ${installName}`,
         manufacturer: 'REHAU',
         model: 'NEA SMART 2.0',
-        sw_version: '2.7.3'
+        sw_version: SW_VERSION
       },
       
       // Mode control only (heat/cool)
