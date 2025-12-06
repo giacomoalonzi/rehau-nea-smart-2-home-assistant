@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.7.6] - 2025-12-06
+
+### 🐛 Critical Bug Fix
+
+#### MQTT Reconnection Loop Fixed
+- **Root Cause**: When the REHAU MQTT connection closed (due to network issues or token expiration), the client would attempt to reconnect using the **old expired token**, causing an infinite reconnection loop
+- **Solution**: Implemented proper reconnection handling with token refresh:
+  - Disabled automatic MQTT reconnection (`reconnectPeriod: 0`)
+  - Added manual reconnection handler that triggers on connection close
+  - Refreshes authentication token **before** attempting to reconnect
+  - Properly cleans up old connection and creates new one with fresh credentials
+  - Restores all subscriptions after successful reconnection
+  - Implements exponential backoff (5s initial, 30s retry on failure)
+
+#### Reconnection Flow
+1. **Connection Closes** → Detect disconnection
+2. **Wait 5 seconds** → Allow transient issues to resolve
+3. **Refresh Token** → Get fresh authentication credentials via `ensureValidToken()`
+4. **Close Old Connection** → Clean up stale MQTT client
+5. **Reconnect** → Create new connection with fresh token
+6. **Restore Subscriptions** → Re-subscribe to all installation topics
+7. **On Failure** → Wait 30 seconds and retry from step 3
+
+#### Benefits
+- **No More Loops**: Proper authentication on every reconnection attempt
+- **Automatic Recovery**: System recovers from network issues and token expiration
+- **Better Logging**: Clear visibility into reconnection process
+- **Graceful Shutdown**: Properly cancels reconnection attempts on disconnect
+
+---
+
 ## [2.7.5] - 2025-12-05
 
 ### 🐛 Bug Fixes & Improvements

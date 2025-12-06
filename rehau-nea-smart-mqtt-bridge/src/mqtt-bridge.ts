@@ -21,6 +21,8 @@ class RehauMQTTBridge {
   private installations: string[] = [];
   private channelToZoneName: Map<string, string> = new Map(); // channelId -> zoneName
   private channelToGroupName: Map<string, string> = new Map(); // channelId -> groupName
+  private isReconnecting: boolean = false;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
 
   constructor(rehauAuth: RehauAuthPersistent, mqttConfig: MQTTConfig) {
     this.rehauAuth = rehauAuth;
@@ -71,7 +73,7 @@ class RehauMQTTBridge {
         protocol: 'wss',
         rejectUnauthorized: true,
         keepalive: 60,
-        reconnectPeriod: 5000,
+        reconnectPeriod: 0, // Disable automatic reconnection - we'll handle it manually
         connectTimeout: 30000,
         protocolVersion: 4,
         wsOptions: {
@@ -145,15 +147,16 @@ class RehauMQTTBridge {
       this.rehauClient.on('close', () => {
         logger.warn('⚠️  REHAU MQTT connection closed');
         logger.info(`📊 Subscriptions to restore: ${this.rehauSubscriptions.size}`);
-        logger.debug('Connection details:', {
-          username,
-          clientId: this.rehauAuth.getClientId(),
-          hasToken: !!password
-        });
+        
+        // Handle manual reconnection with token refresh
+        if (!this.isReconnecting) {
+          this.handleRehauReconnection();
+        }
       });
 
       this.rehauClient.on('reconnect', () => {
-        logger.info('🔄 Attempting to reconnect to REHAU MQTT...');
+        // This should not fire since reconnectPeriod is 0
+        logger.debug('MQTT client reconnect event (should not happen)');
       });
       
       this.rehauClient.on('offline', () => {
@@ -234,6 +237,80 @@ class RehauMQTTBridge {
         logger.warn('📴 Home Assistant MQTT client went offline');
       });
     });
+  }
+
+  /**
+   * Handle REHAU MQTT reconnection with token refresh
+   */
+  private async handleRehauReconnection(): Promise<void> {
+    if (this.isReconnecting) {
+      logger.debug('Reconnection already in progress, skipping');
+      return;
+    }
+
+    this.isReconnecting = true;
+    
+    // Clear any existing reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    // Wait 5 seconds before attempting reconnection
+    this.reconnectTimeout = setTimeout(async () => {
+      try {
+        logger.info('🔄 Preparing to reconnect to REHAU MQTT...');
+        
+        // Step 1: Refresh authentication token
+        logger.info('🔐 Refreshing authentication token...');
+        await this.rehauAuth.ensureValidToken();
+        logger.info('✅ Token refreshed successfully');
+        
+        // Step 2: Close old connection if it exists
+        if (this.rehauClient) {
+          logger.debug('Closing old REHAU MQTT connection...');
+          this.rehauClient.removeAllListeners();
+          this.rehauClient.end(true);
+          this.rehauClient = null;
+        }
+        
+        // Step 3: Reconnect with fresh token
+        logger.info('🔌 Reconnecting to REHAU MQTT with fresh credentials...');
+        await this.connectToRehau();
+        
+        // Step 4: Restore subscriptions
+        logger.info(`📋 Restoring ${this.rehauSubscriptions.size} subscriptions...`);
+        const subscriptionsToRestore = Array.from(this.rehauSubscriptions);
+        this.rehauSubscriptions.clear(); // Clear and re-add as we subscribe
+        
+        for (const topic of subscriptionsToRestore) {
+          await new Promise<void>((resolve, reject) => {
+            this.rehauClient!.subscribe(topic, (err) => {
+              if (!err) {
+                logger.info(`✅ Restored subscription: ${topic}`);
+                this.rehauSubscriptions.add(topic);
+                resolve();
+              } else {
+                logger.error(`❌ Failed to restore subscription ${topic}:`, err);
+                reject(err);
+              }
+            });
+          });
+        }
+        
+        logger.info('✅ REHAU MQTT reconnection completed successfully');
+        this.isReconnecting = false;
+        
+      } catch (error) {
+        logger.error('❌ Failed to reconnect to REHAU MQTT:', (error as Error).message);
+        logger.error('Will retry in 30 seconds...');
+        this.isReconnecting = false;
+        
+        // Retry after 30 seconds
+        this.reconnectTimeout = setTimeout(() => {
+          this.handleRehauReconnection();
+        }, 30000);
+      }
+    }, 5000);
   }
 
   async subscribeToInstallation(installUnique: string): Promise<void> {
@@ -588,6 +665,13 @@ class RehauMQTTBridge {
 
   async disconnect(): Promise<void> {
     logger.info('🔌 Disconnecting from MQTT brokers...');
+    
+    // Stop reconnection attempts
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.isReconnecting = false;
     
     if (this.referentialsTimer) {
       clearInterval(this.referentialsTimer);
