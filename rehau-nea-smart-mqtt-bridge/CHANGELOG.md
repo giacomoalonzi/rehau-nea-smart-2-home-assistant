@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.7] - 2025-12-07
+
+### 🔧 Code Quality Improvements
+- Improved internal code quality and type safety for better stability and reliability
+- Enhanced error handling and validation throughout the application
+
+---
+
 ## [2.7.6] - 2025-12-06
 
 ### 🐛 Critical Bug Fix
