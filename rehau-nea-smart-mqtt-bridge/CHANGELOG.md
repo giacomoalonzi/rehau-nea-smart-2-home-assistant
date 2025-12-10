@@ -6,6 +6,70 @@
 - Improved internal code quality and type safety for better stability and reliability
 - Enhanced error handling and validation throughout the application
 
+### ✅ Runtime Configuration Validation
+
+#### Comprehensive Configuration Validation
+- **Early Error Detection**: Configuration errors are now detected **before** any components are initialized, preventing runtime failures
+- **Type-Safe Validation**: Full TypeScript validation replaces bash-only checks with better error messages and type safety
+- **Centralized Validation**: All configuration validation logic consolidated in `ConfigValidator` class
+
+#### What Gets Validated
+
+**REHAU Credentials**:
+- Email format validation (must be valid email address)
+- Email minimum length (5 characters)
+- Password presence (required)
+- Password security warning if less than 8 characters
+
+**MQTT Configuration**:
+- Host format validation (hostname, IPv4, IPv6, or localhost)
+- Port range validation (1-65535)
+- Username/password consistency (if username provided, password required)
+
+**API Configuration**:
+- Port range validation (1024-65535, prevents privileged port issues)
+
+**Interval Settings**:
+- `ZONE_RELOAD_INTERVAL`: 30-86400 seconds
+- `TOKEN_REFRESH_INTERVAL`: 1800-86400 seconds
+- `REFERENTIALS_RELOAD_INTERVAL`: 3600-604800 seconds
+- `LIVE_DATA_INTERVAL`: minimum 60 seconds
+- `COMMAND_RETRY_TIMEOUT`: 1-300 seconds
+- `COMMAND_MAX_RETRIES`: 1-10
+
+**Optional Settings**:
+- `LOG_LEVEL`: must be one of 'error', 'warn', 'info', 'debug'
+- `USE_GROUP_IN_NAMES`: must be 'true' or 'false'
+
+#### Error Handling
+- **Critical Errors**: Invalid required fields or out-of-range values cause application exit with clear error messages
+- **Warnings**: Non-critical issues (like short passwords or invalid optional values) are logged but don't block startup
+- **Formatted Output**: Errors and warnings displayed in clear, formatted blocks for easy reading
+- **Default Value Logging**: System logs when default values are used, helping users understand their configuration
+
+#### Example Error Output
+```
+═══════════════════════════════════════════════════════════════
+❌ Configuration validation failed
+═══════════════════════════════════════════════════════════════
+  [REHAU_EMAIL] REHAU email is required
+  [MQTT_PORT] MQTT port must be between 1 and 65535 (got: 70000)
+═══════════════════════════════════════════════════════════════
+```
+
+#### Testing Infrastructure
+- **Comprehensive Test Suite**: Added 16 test cases covering all validation scenarios
+- **Automated Testing**: Run `npm run test:config-validation` to verify validation logic
+- **Test Documentation**: Complete guide in `docs/TEST_CONFIG_VALIDATION.md` with manual testing examples
+- **Organized Structure**: Tests organized in `test/` directory, documentation in `docs/` directory
+
+#### Benefits
+- **Faster Troubleshooting**: Configuration errors caught immediately at startup with clear messages
+- **Better User Experience**: No more mysterious runtime failures due to invalid configuration
+- **Prevents Common Mistakes**: Validates port ranges, email formats, and interval values before they cause issues
+- **Clear Guidance**: Warning messages help users understand recommended configuration values
+- **Type Safety**: Full TypeScript validation ensures type correctness at compile time
+
 ---
 
 ## [2.7.6] - 2025-12-06

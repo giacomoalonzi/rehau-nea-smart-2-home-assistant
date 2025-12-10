@@ -8,6 +8,7 @@ import logger, { registerObfuscation } from './logger';
 import RehauAuthPersistent from './rehau-auth';
 import RehauMQTTBridge from './mqtt-bridge';
 import ClimateController from './climate-controller';
+import { ConfigValidator } from './config-validator';
 
 const app: Express = express();
 app.use(express.json());
@@ -44,6 +45,64 @@ const config: Config = {
     port: parseInt(process.env.API_PORT || '3000')
   }
 };
+
+// Log default values being used
+if (!process.env.MQTT_HOST) {
+  logger.info('Using default MQTT_HOST: localhost');
+}
+if (!process.env.MQTT_PORT) {
+  logger.info('Using default MQTT_PORT: 1883');
+}
+if (!process.env.API_PORT) {
+  logger.info('Using default API_PORT: 3000');
+}
+if (!process.env.ZONE_RELOAD_INTERVAL) {
+  logger.info('Using default ZONE_RELOAD_INTERVAL: 300 seconds');
+}
+if (!process.env.TOKEN_REFRESH_INTERVAL) {
+  logger.info('Using default TOKEN_REFRESH_INTERVAL: 21600 seconds');
+}
+if (!process.env.REFERENTIALS_RELOAD_INTERVAL) {
+  logger.info('Using default REFERENTIALS_RELOAD_INTERVAL: 86400 seconds');
+}
+if (!process.env.LIVE_DATA_INTERVAL) {
+  logger.info('Using default LIVE_DATA_INTERVAL: 300 seconds');
+}
+if (!process.env.COMMAND_RETRY_TIMEOUT) {
+  logger.info('Using default COMMAND_RETRY_TIMEOUT: 30 seconds');
+}
+if (!process.env.COMMAND_MAX_RETRIES) {
+  logger.info('Using default COMMAND_MAX_RETRIES: 3');
+}
+if (!process.env.LOG_LEVEL) {
+  logger.info('Using default LOG_LEVEL: info');
+}
+if (!process.env.USE_GROUP_IN_NAMES) {
+  logger.info('Using default USE_GROUP_IN_NAMES: false');
+}
+
+// Validate configuration before initializing components
+const validationResult = ConfigValidator.validateConfig(config);
+if (!validationResult.isValid) {
+  logger.error('═══════════════════════════════════════════════════════════════');
+  logger.error('❌ Configuration validation failed');
+  logger.error('═══════════════════════════════════════════════════════════════');
+  validationResult.errors.forEach(err => {
+    logger.error(`  [${err.field}] ${err.message}`);
+  });
+  logger.error('═══════════════════════════════════════════════════════════════');
+  process.exit(1);
+}
+
+if (validationResult.warnings.length > 0) {
+  logger.warn('═══════════════════════════════════════════════════════════════');
+  logger.warn('⚠️  Configuration warnings');
+  logger.warn('═══════════════════════════════════════════════════════════════');
+  validationResult.warnings.forEach(warn => {
+    logger.warn(`  [${warn.field}] ${warn.message}`);
+  });
+  logger.warn('═══════════════════════════════════════════════════════════════');
+}
 
 // Initialize components
 const auth = new RehauAuthPersistent(config.rehau.email, config.rehau.password);
