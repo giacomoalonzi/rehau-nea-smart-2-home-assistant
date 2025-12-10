@@ -384,21 +384,84 @@ function stopPolling(): void {
   }
 }
 
+// Flag to prevent multiple cleanup calls
+let isShuttingDown = false;
+
+/**
+ * Centralized shutdown function with timeout protection
+ */
+async function shutdown(exitCode: number): Promise<void> {
+  // Prevent multiple shutdown calls
+  if (isShuttingDown) {
+    logger.warn('Shutdown already in progress, ignoring duplicate call');
+    return;
+  }
+  
+  isShuttingDown = true;
+  logger.info('🛑 Starting graceful shutdown...');
+  
+  // Set timeout for shutdown (30 seconds max)
+  const shutdownTimeout = setTimeout(() => {
+    logger.error('⚠️  Shutdown timeout exceeded (30s), forcing exit');
+    process.exit(exitCode);
+  }, 30000);
+  
+  try {
+    // Step 1: Stop polling
+    logger.info('Step 1: Stopping polling...');
+    stopPolling();
+    logger.info('✅ Polling stopped');
+    
+    // Step 2: Cleanup ClimateController
+    logger.info('Step 2: Cleaning up ClimateController...');
+    climateController.cleanup();
+    logger.info('✅ ClimateController cleaned up');
+    
+    // Step 3: Cleanup MQTT Bridge
+    logger.info('Step 3: Cleaning up MQTT Bridge...');
+    await mqttBridge.cleanup();
+    logger.info('✅ MQTT Bridge cleaned up');
+    
+    // Step 4: Cleanup Auth
+    logger.info('Step 4: Cleaning up Auth...');
+    auth.cleanup();
+    logger.info('✅ Auth cleaned up');
+    
+    // Clear shutdown timeout
+    clearTimeout(shutdownTimeout);
+    
+    logger.info('✅ Graceful shutdown completed');
+    process.exit(exitCode);
+  } catch (error) {
+    logger.error('❌ Error during shutdown:', (error as Error).message);
+    clearTimeout(shutdownTimeout);
+    process.exit(1);
+  }
+}
+
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
-  logger.info('🛑 Received SIGTERM, shutting down gracefully...');
-  stopPolling();
-  auth.stopTokenRefresh();
-  await mqttBridge.disconnect();
-  process.exit(0);
+  logger.info('🛑 Received SIGTERM');
+  await shutdown(0);
 });
 
 process.on('SIGINT', async () => {
-  logger.info('🛑 Received SIGINT, shutting down gracefully...');
-  stopPolling();
-  auth.stopTokenRefresh();
-  await mqttBridge.disconnect();
-  process.exit(0);
+  logger.info('🛑 Received SIGINT');
+  await shutdown(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', async (error: Error) => {
+  logger.error('❌ Uncaught Exception:', error.message);
+  logger.error('Stack:', error.stack);
+  await shutdown(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', async (reason: unknown, promise: Promise<unknown>) => {
+  logger.error('❌ Unhandled Rejection at:', promise);
+  logger.error('Reason:', reason);
+  await shutdown(1);
 });
 
 // Start the application

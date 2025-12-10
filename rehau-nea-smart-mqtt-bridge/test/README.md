@@ -1,37 +1,97 @@
 # Test Suite
 
-Questa cartella contiene i test per il progetto REHAU NEA SMART 2.0 MQTT Bridge.
+This folder contains tests for the REHAU NEA SMART 2.0 MQTT Bridge project.
 
-## Test Disponibili
+## Available Tests
 
-### Test di Validazione Configurazione
+### Configuration Validation Tests
 
 **File**: `test-config-validation.ts`
 
-Esegue una suite completa di test per la validazione runtime della configurazione.
+Runs a comprehensive test suite for runtime configuration validation.
 
-**Eseguire**:
+**Run**:
 ```bash
 npm run test:config-validation
 ```
 
-**Cosa testa**:
-- ✅ Configurazione valida
-- ❌ Email mancante o formato invalido
-- ⚠️ Password troppo corta (warning)
-- ❌ Porte MQTT/API fuori range
-- ❌ Username MQTT senza password
-- ❌ Hostname invalido
-- ✅ Indirizzo IPv4 valido
-- ❌ Intervalli fuori range
-- ⚠️ LOG_LEVEL invalido (warning)
-- ⚠️ USE_GROUP_IN_NAMES invalido (warning)
+**What it tests**:
+- ✅ Valid configuration
+- ❌ Missing email or invalid format
+- ⚠️ Password too short (warning)
+- ❌ MQTT/API ports out of range
+- ❌ MQTT username without password
+- ❌ Invalid hostname
+- ✅ Valid IPv4 address
+- ❌ Intervals out of range
+- ⚠️ Invalid LOG_LEVEL (warning)
+- ⚠️ Invalid USE_GROUP_IN_NAMES (warning)
 
-**Output**: Mostra un riepilogo con tutti i test passati/falliti e i dettagli degli errori e warning generati.
+**Output**: Shows a summary with all passed/failed tests and details of errors and warnings generated.
 
-## Note
+### Memory Leaks and Cleanup Tests
 
-I test utilizzano `ts-node` per eseguire direttamente i file TypeScript senza compilazione.
+**File**: Documentation and manual tests
 
-Per maggiori dettagli sui test manuali, consulta `../docs/TEST_CONFIG_VALIDATION.md`.
+**Run manual tests**:
 
+1. **Monitor memory usage during prolonged execution**:
+   ```bash
+   # Start the application
+   npm start
+   
+   # In another terminal, monitor memory usage every 10 seconds
+   watch -n 10 'ps aux | grep node | grep -v grep | awk "{print \$6/1024 \" MB\"}"'
+   ```
+
+2. **Verify cleanup on shutdown**:
+   ```bash
+   # Start the application
+   npm start
+   
+   # Wait for complete initialization
+   # Send SIGTERM or SIGINT (Ctrl+C)
+   # Verify in logs that all cleanup operations were executed
+   ```
+
+3. **Verify cleanup on critical errors**:
+   ```bash
+   # Start the application
+   npm start
+   
+   # Simulate critical error (e.g. kill -9)
+   # Verify that cleanup is called even for unhandled errors
+   ```
+
+**What to verify**:
+- ✅ Memory usage does not constantly increase during prolonged execution
+- ✅ All timers are properly cleaned up on shutdown
+- ✅ All subscriptions are removed on shutdown
+- ✅ All MQTT connections are properly closed
+- ✅ Cleanup is called even on critical errors (uncaughtException, unhandledRejection)
+- ✅ Cleanup is idempotent (multiple calls are safe)
+- ✅ No memory leaks after multiple shutdowns and restarts
+
+**Example script for memory monitoring**:
+```javascript
+// monitor-memory.js
+const { spawn } = require('child_process');
+
+const app = spawn('npm', ['start'], { stdio: 'inherit' });
+
+setInterval(() => {
+  const memUsage = process.memoryUsage();
+  console.log(`Memory: RSS=${(memUsage.rss/1024/1024).toFixed(2)}MB, Heap=${(memUsage.heapUsed/1024/1024).toFixed(2)}MB`);
+}, 10000);
+
+app.on('exit', () => {
+  console.log('Application exited');
+  process.exit(0);
+});
+```
+
+## Notes
+
+Tests use `ts-node` to execute TypeScript files directly without compilation.
+
+For more details on manual tests, see `../docs/TEST_CONFIG_VALIDATION.md`.
