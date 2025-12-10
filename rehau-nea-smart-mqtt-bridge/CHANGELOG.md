@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.7.7] - 2025-12-07
+## [2.7.7] - 2025-12-10
 
 ### 🎯 Dependency Cleanup & Optimization
 
@@ -30,6 +30,14 @@
 - ✅ **0 vulnerabilities** in all dependencies
 - ✅ All tests passing
 - ✅ Docker build successful
+
+### ✅ Runtime Configuration Validation
+- Configuration errors detected before component initialization with TypeScript validation
+- Comprehensive validation for credentials, MQTT settings, API ports, and interval values with clear error messages
+
+### 🧹 Memory Leaks and Resource Cleanup
+- Comprehensive cleanup system prevents memory leaks by properly releasing all timers, subscriptions, and connections on shutdown
+- Idempotent cleanup methods with graceful shutdown handling including timeout protection and error recovery
 
 ---
 

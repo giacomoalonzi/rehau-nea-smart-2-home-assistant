@@ -20,6 +20,7 @@ class RehauAuthPersistent {
   private installs: InstallInfo[] = [];
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private tokenRefreshInterval: number;
+  private isCleanedUp: boolean = false;
 
   constructor(email: string, password: string) {
     this.email = email;
@@ -64,6 +65,28 @@ class RehauAuthPersistent {
       clearInterval(this.tokenRefreshTimer);
       this.tokenRefreshTimer = null;
     }
+  }
+
+  /**
+   * Cleanup method to stop timers and release resources
+   * Idempotent: safe to call multiple times
+   */
+  cleanup(): void {
+    if (this.isCleanedUp) {
+      logger.debug('RehauAuthPersistent already cleaned up, skipping');
+      return;
+    }
+    
+    logger.info('Cleaning up RehauAuthPersistent...');
+    this.stopTokenRefresh();
+    
+    // Verify cleanup completed
+    if (this.tokenRefreshTimer !== null) {
+      logger.warn('Token refresh timer was not properly cleaned up');
+    }
+    
+    this.isCleanedUp = true;
+    logger.info('RehauAuthPersistent cleanup completed');
   }
 
   /**
